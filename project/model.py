@@ -4,7 +4,7 @@ import cv2
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "defect_model.npz")
 EPSILON    = 1e-6
-SMOOTH_K   = 7
+SMOOTH_K   = 3
 
 
 def predict(image):
@@ -16,11 +16,12 @@ def predict(image):
     Returns:
         Binary mask as numpy array of shape (H, W), uint8 with values 0 or 255.
     """
-    data      = np.load(MODEL_PATH)
-    mean_lab  = data["mean_lab"]
-    std_lab   = data["std_lab"]
-    threshold = float(data["threshold"])
-    img_size  = tuple(data["img_size"].tolist())
+    data        = np.load(MODEL_PATH)
+    mean_lab    = data["mean_lab"]
+    std_lab     = data["std_lab"]
+    threshold   = float(data["threshold"])
+    img_size    = tuple(data["img_size"].tolist())
+    void_weight = float(data["void_weight"]) if "void_weight" in data else 1.5
 
     # The test harness loads images with Pillow (RGB). Convert to BGR for cv2.
     if image.ndim == 2:
@@ -39,10 +40,19 @@ def predict(image):
         l = np.clip((l.astype(np.float32) - lo) * 255.0 / (hi - lo), 0, 255).astype(np.uint8)
     small = cv2.cvtColor(cv2.merge([l, a, b]), cv2.COLOR_Lab2BGR)
 
-    # Anomaly score
+    # Anomaly score — max absolute z-score across LAB channels
     lab   = cv2.cvtColor(small, cv2.COLOR_BGR2Lab).astype(np.float32)
     z     = np.abs((lab - mean_lab) / (std_lab + EPSILON))
-    score = cv2.GaussianBlur(z.max(axis=2), (SMOOTH_K, SMOOTH_K), 0)
+    score = z.max(axis=2)
+
+    # Void/hole detection: amplify negative L deviation.
+    # Where the model expects bright bristles but the image is dark, the
+    # material is missing.  Multiplying by void_weight makes these holes
+    # produce a stronger signal than the symmetric z-score alone.
+    z_void = np.maximum(0, (mean_lab[:, :, 0] - lab[:, :, 0]) / (std_lab[:, :, 0] + EPSILON))
+    score  = np.maximum(score, z_void * void_weight)
+
+    score = cv2.GaussianBlur(score, (SMOOTH_K, SMOOTH_K), 0)
     score = cv2.resize(score, (w_orig, h_orig), interpolation=cv2.INTER_LINEAR)
 
     # Foreground mask — ignore dark background pixels (L < 30 in original image)
@@ -52,6 +62,13 @@ def predict(image):
     # Mask: anomaly AND foreground only
     mask = (score >= threshold).astype(np.uint8) * 255
     mask = cv2.bitwise_and(mask, foreground)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN,  cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11)))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN,  cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7)))
+
+    # Remove small noise blobs (≤ 350 pixels)
+    n_labels, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    for i in range(1, n_labels):
+        if stats[i, cv2.CC_STAT_AREA] <= 350:
+            mask[labels == i] = 0
+
     return mask
