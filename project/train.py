@@ -2,11 +2,6 @@
 train.py — Train the toothbrush defect detection model.
 
 Strategy: per-pixel Gaussian model in LAB colour space.
-  - Preprocessing: CLAHE on the L channel equalises brightness across images
-    taken under slightly different lighting, tightening the good-image std so
-    defect z-scores are larger and easier to threshold.
-    (Denoising and sharpening were tested but hurt F1: denoising blurs out
-    bristle-tip defects; unsharp masking inflates variance among good images.)
   - Parallel image loading with ThreadPoolExecutor
   - Threshold tuned by maximising F1-score against ground-truth masks
 
@@ -32,53 +27,31 @@ EPSILON        = 1e-6
 N_THRESH_STEPS = 400
 N_WORKERS      = 8
 
-# ── preprocessing parameters ─────────────────────────────────────────────────
-DENOISE_H      = 3     # fastNlMeans strength — keep low to preserve defect texture
-CLAHE_CLIP     = 1.0   # gentle clip limit; 2.0 over-equalises and washes out defects
-CLAHE_GRID     = (2, 2) # 4×4 tiles on 1024px = 128px tiles — more global, less aggressive
-UNSHARP_SIGMA  = 1.0   # small sigma — sharpen fine structure without amplifying noise
-UNSHARP_AMOUNT = 0.5   # conservative blend — subtle edge boost only
 
+# ── contrast enhancement ─────────────────────────────────────────────────────
 
-# ── preprocessing pipeline ───────────────────────────────────────────────────
-
-_clahe = cv2.createCLAHE(clipLimit=CLAHE_CLIP, tileGridSize=CLAHE_GRID)
-
-def preprocess(img_bgr):
+def enhance_contrast(img_bgr):
     """
-    Three-stage preprocessing pipeline applied identically at train and inference.
+    Percentile contrast stretching on the L channel.
 
-    1. Denoising (gentle) — fastNlMeansDenoisingColored with h=3 removes sensor
-       noise without blurring bristle-tip structure. Strength is kept low so
-       actual defects (which are texture anomalies) are not smoothed away.
-
-    2. Normalisation — CLAHE on the L channel of LAB space corrects for
-       per-image brightness differences. Clip=1.0 and 4×4 tiles keep it gentle:
-       aggressive settings (clip=2.0, 8×8) over-equalise locally and wash out
-       the texture differences that reveal defects.
-
-    3. Contrast enhancement (gentle) — unsharp mask on L with amount=0.5
-       slightly boosts edges and fine structure without inflating inter-image
-       variance the way a strong sharpening would.
+    Stretches the 2nd–98th percentile of L values to the full 0–255 range.
+    This is a hard, direct contrast boost (no smoothing, no tiles):
+      - Images that are globally dim get boosted
+      - Images that are globally bright get normalised
+      - Fine local differences (bristle defects) become proportionally larger
+    Applied consistently at train and inference so the statistical model
+    sees a normalised, high-contrast feature space.
     """
-    # 1. Denoising
-    denoised = cv2.fastNlMeansDenoisingColored(img_bgr, None,
-                                               h=DENOISE_H, hColor=DENOISE_H,
-                                               templateWindowSize=7,
-                                               searchWindowSize=21)
-    # 2. Normalisation — gentle CLAHE on L channel only
-    lab = cv2.cvtColor(denoised, cv2.COLOR_BGR2Lab)
+    lab = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2Lab)
     l, a, b = cv2.split(lab)
-    l_eq = _clahe.apply(l)
 
-    # 3. Contrast enhancement — unsharp mask on equalised L
-    blur    = cv2.GaussianBlur(l_eq, (0, 0), UNSHARP_SIGMA)
-    l_sharp = np.clip(
-        cv2.addWeighted(l_eq, 1 + UNSHARP_AMOUNT, blur, -UNSHARP_AMOUNT, 0),
-        0, 255
-    ).astype(np.uint8)
+    lo, hi = np.percentile(l, 2), np.percentile(l, 98)
+    if hi > lo:
+        l_stretched = np.clip((l.astype(np.float32) - lo) * 255.0 / (hi - lo), 0, 255).astype(np.uint8)
+    else:
+        l_stretched = l
 
-    return cv2.cvtColor(cv2.merge([l_sharp, a, b]), cv2.COLOR_Lab2BGR)
+    return cv2.cvtColor(cv2.merge([l_stretched, a, b]), cv2.COLOR_Lab2BGR)
 
 
 # ── parallel image loading ───────────────────────────────────────────────────
@@ -88,7 +61,7 @@ def _load_and_resize(path):
     if img is None:
         return None
     img = cv2.resize(img, IMG_SIZE, interpolation=cv2.INTER_AREA)
-    return preprocess(img)
+    return enhance_contrast(img)
 
 
 def load_images(directory, suffix=""):
@@ -128,14 +101,20 @@ print(f"  Std  range : {std_lab.min():.4f} – {std_lab.max():.2f}  (floor={std_
 # ── anomaly score helper ─────────────────────────────────────────────────────
 
 def anomaly_score(img_bgr):
-    """Return (H_orig, W_orig) float32 anomaly map for a BGR image."""
+    """Return (H_orig, W_orig) float32 anomaly map, background pixels zeroed."""
     h_orig, w_orig = img_bgr.shape[:2]
     small = cv2.resize(img_bgr, IMG_SIZE, interpolation=cv2.INTER_AREA)
-    small = preprocess(small)   # same pipeline as training
+    small = enhance_contrast(small)
     lab   = to_lab(small)
     z     = np.abs((lab - mean_lab) / (std_lab + EPSILON))
     score = z.max(axis=2)
     score = cv2.GaussianBlur(score, (SMOOTH_K, SMOOTH_K), 0)
+
+    # Zero out dark background pixels so they don't influence threshold tuning
+    gray       = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+    foreground = gray > 30
+    score[~foreground] = 0.0
+
     return cv2.resize(score, (w_orig, h_orig), interpolation=cv2.INTER_LINEAR)
 
 
@@ -191,14 +170,9 @@ print(f"  Best F1-score  : {best_f1:.4f}")
 
 np.savez_compressed(
     MODEL_PATH,
-    mean_lab       = mean_lab,
-    std_lab        = std_lab,
-    threshold      = np.float32(best_thresh),
-    img_size       = np.array(IMG_SIZE),
-    denoise_h      = np.float32(DENOISE_H),
-    clahe_clip     = np.float32(CLAHE_CLIP),
-    clahe_grid     = np.array(CLAHE_GRID),
-    unsharp_sigma  = np.float32(UNSHARP_SIGMA),
-    unsharp_amount = np.float32(UNSHARP_AMOUNT),
+    mean_lab  = mean_lab,
+    std_lab   = std_lab,
+    threshold = np.float32(best_thresh),
+    img_size  = np.array(IMG_SIZE),
 )
 print(f"\nModel saved → {MODEL_PATH}")
