@@ -1,10 +1,10 @@
 """
-train_v2.py — V2: PaDiM-style defect detection using pretrained ResNet18 patch features.
+train_v2.py — V2: PaDiM-style defect detection using pretrained ResNe50 patch features.
 
 Why better than V1 (LAB Gaussian)?
   V1 computes z-scores in raw 3-channel LAB space — very low-dimensional, misses
   texture/shape information entirely.  V2 extracts 448-dimensional patch descriptors
-  from three ResNet18 layers (layer1/2/3), reduces via PCA to 50 dims, and fits a
+  from three ResNet50 layers (layer1/2/3), reduces via PCA to 50 dims, and fits a
   full multivariate Gaussian per spatial position.  The Mahalanobis distance in this
   rich feature space is far more discriminative.
 
@@ -59,7 +59,7 @@ print(f"IMG_SIZE={IMG_SIZE}  N_COMPONENTS={N_COMPONENTS}  REG={REG_COEF}")
 
 class ResNetExtractor(torch.nn.Module):
     """
-    Multi-scale patch features from a frozen pretrained ResNet18.
+    Multi-scale patch features from a frozen pretrained ResNet50.
 
     Extracts layer1 (64-ch), layer2 (128-ch), layer3 (256-ch) feature maps,
     upsamples layer2 and layer3 to match layer1's spatial resolution, and
@@ -190,7 +190,7 @@ def load_dir(directory: str, suffix: str = "") -> list:
 
 # ── main ──────────────────────────────────────────────────────────────────────
 
-print("\nBuilding feature extractor (ResNet18, ImageNet pretrained) …")
+print("\nBuilding feature extractor (ResNet50, ImageNet pretrained) …")
 extractor = ResNetExtractor().to(DEVICE)
 extractor.eval()
 
