@@ -26,7 +26,7 @@ GT_DIR     = os.path.join(BASE_DIR, "ground_truth", "defective")
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "defect_model.npz")
 
 IMG_SIZE        = (1024, 1024)
-SMOOTH_K        = 3
+SMOOTH_K        = 13
 EPSILON         = 1e-6
 N_THRESH_STEPS  = 400
 N_WORKERS       = 8

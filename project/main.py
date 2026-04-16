@@ -10,7 +10,7 @@ import os
 import sys
 import numpy as np
 import cv2
-from model import predict
+from model import predict   # V2: PaDiM (ResNet18 features) — change to model for V1
 
 BASE_DIR   = os.path.join(os.path.dirname(__file__), "toothbrush")
 GOOD_DIR   = os.path.join(BASE_DIR, "train", "good")

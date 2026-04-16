@@ -4,7 +4,7 @@ import cv2
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "defect_model.npz")
 EPSILON    = 1e-6
-SMOOTH_K   = 3
+SMOOTH_K   = 13
 
 
 def predict(image):

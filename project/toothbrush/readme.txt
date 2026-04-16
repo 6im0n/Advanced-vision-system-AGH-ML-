@@ -26,3 +26,5 @@ Contact
 If you have any questions or comments about the dataset, feel free to
 contact us via: paul.bergmann@mvtec.com, fauser@mvtec.com,
 sattlegger@mvtec.com, steger@mvtec.com
+
+https://github.com/tSchlegl/f-AnoGAN
