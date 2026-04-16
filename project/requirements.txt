@@ -1,3 +1,7 @@
 numpy
 opencv-python
 matplotlib
+# V2 dependencies (PaDiM model)
+torch
+torchvision
+scikit-learn
