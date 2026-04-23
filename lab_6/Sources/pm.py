@@ -19,9 +19,9 @@ def plot_matches(im1,im2,matches):
     im3 = appendimages(im1,im2)
     
     plt.figure()
-    plt.imshow(im3)
+    plt.imshow(im3, cmap='gray')
     
     cols1 = im1.shape[1]
     for i, m in enumerate(matches):
-            plt.plot([m[0][1],m[1][1]+cols1],[m[0][0],m[1][0]],colors[i%6], linewidth=0.5)
+            plt.plot([m[0][1],m[1][1]+cols1],[m[0][0],m[1][0]],colors[i%6], linewidth=3)
     plt.axis('off') 
