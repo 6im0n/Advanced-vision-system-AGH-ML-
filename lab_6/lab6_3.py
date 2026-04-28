@@ -9,9 +9,9 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from Sources.pm import *
 
 K_CONST = 0.04
-PATCH_SIZE = 31
+PATCH_SIZE = 150
 HALF_PATCH = PATCH_SIZE // 2  # 15
-N_BEST = 50
+N_BEST = 200
 FAST_THRESHOLD = 0.05
 
 # Bresenham circle radius 3 — fits in 7×7, 16 pixels
@@ -114,13 +114,9 @@ def load_orb_pairs():
         return np.random.randint(-HALF_PATCH, HALF_PATCH, (256, 4)).astype(float)
 
 
-def get_rotated_brief(image, y, x, angle, pairs):
-    """Steered BRIEF: blur 31×31 patch with 5×5 Gaussian, rotate pairs by angle."""
-    patch = image[y - HALF_PATCH:y + HALF_PATCH + 1,
-                  x - HALF_PATCH:x + HALF_PATCH + 1].copy()
-    # truncate=1.0 with sigma=2 → 5×5 kernel
-    blurred = ndimage.gaussian_filter(patch, sigma=2, truncate=1.0)
-
+def get_rotated_brief(blurred, y, x, angle, pairs):
+    """Steered BRIEF: sample from pre-blurred image at rotated offsets."""
+    H, W = blurred.shape
     cos_a, sin_a = np.cos(angle), np.sin(angle)
 
     descriptor = []
@@ -131,11 +127,10 @@ def get_rotated_brief(image, y, x, angle, pairs):
         rx2 = int(round(cos_a * px2 - sin_a * py2))
         ry2 = int(round(sin_a * px2 + cos_a * py2))
 
-        # Map offsets to patch indices, clamp to [0, PATCH_SIZE)
-        r1 = int(np.clip(HALF_PATCH + ry1, 0, PATCH_SIZE - 1))
-        c1 = int(np.clip(HALF_PATCH + rx1, 0, PATCH_SIZE - 1))
-        r2 = int(np.clip(HALF_PATCH + ry2, 0, PATCH_SIZE - 1))
-        c2 = int(np.clip(HALF_PATCH + rx2, 0, PATCH_SIZE - 1))
+        r1 = int(np.clip(y + ry1, 0, H - 1))
+        c1 = int(np.clip(x + rx1, 0, W - 1))
+        r2 = int(np.clip(y + ry2, 0, H - 1))
+        c2 = int(np.clip(x + rx2, 0, W - 1))
 
         descriptor.append(1 if blurred[r1, c1] < blurred[r2, c2] else 0)
 
@@ -166,6 +161,9 @@ def process_image(img_name, pairs):
     img  = load_images(img_name)
     grey = greyscaleimage(img)
 
+    # Pre-blur whole image once with proper 5×5 Gaussian (sigma=1, truncate=2 → radius 2)
+    blurred = ndimage.gaussian_filter(grey, sigma=1.0, truncate=2.0)
+
     # Step 2: FAST detection + Harris measure
     candidates = fast_detector(grey)
     harris     = calculate_harris_measure(grey)
@@ -183,7 +181,7 @@ def process_image(img_name, pairs):
     final_pts   = []
     for y, x in scored:
         angle = get_orientation(grey, y, x)
-        desc  = get_rotated_brief(grey, y, x, angle, pairs)
+        desc  = get_rotated_brief(blurred, y, x, angle, pairs)
         descriptors.append(desc)
         final_pts.append((y, x))
 
