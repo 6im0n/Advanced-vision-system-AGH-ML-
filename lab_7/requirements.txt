@@ -1,0 +1,4 @@
+# add opencv and matplotlib
+opencv-python
+matplotlib
+scipy
