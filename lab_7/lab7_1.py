@@ -5,34 +5,40 @@ import cv2
 
 # the lab learn to become familliar with optical flow :
 # - optical flow is a vector field describing the movement of pixels betwen two consicuted frame (in video sequence for exemple)
+# this method is not efficient is to understand the concept of optical flow, but it is not used in real applications because of its slowness and inaccuracy (it is a block method, not a pixel method)
+# this method use large value for dy and dy... and
 
-SCALE_FACTOR = 2  # div: 1=same, 2=half, 4=quarter
+SCALE_FACTOR = 2  # div: 1=same, 2=half, 4=quart
 PATCH_SIZE = 7    ## must be odd; W2 = PATCH_SIZE // 2
 SEARCH_RANGE = 3  # dX = dY = SEARCH_RANGE axis
 THRESHOLD = 10
 
 def block_method(I, J, W2=3, dX=3, dY=3):
     h, w = I.shape
-    u = np.zeros_like(I, dtype=np.float32)
-    v = np.zeros_like(I, dtype=np.float32)
-    for j in range(W2, h - W2):
-        for i in range(W2, w - W2):
-            IO = np.float32(I[j - W2:j + W2 + 1, i - W2:i + W2 + 1])
-            best_dist = np.inf
-            best_dy, best_dx = 0, 0
-            for dy in range(-dY, dY + 1):
-                for dx in range(-dX, dX + 1):
-                    jj = j + dy
-                    ii = i + dx
-                    if jj - W2 < 0 or jj + W2 + 1 > h or ii - W2 < 0 or ii + W2 + 1 > w:
-                        continue
-                    JO = np.float32(J[jj - W2:jj + W2 + 1, ii - W2:ii + W2 + 1])
-                    dist = np.sqrt(np.sum(np.square(JO - IO)))
-                    if dist < best_dist:
-                        best_dist = dist
-                        best_dy, best_dx = dy, dx
-            u[j, i] = best_dx
-            v[j, i] = best_dy
+    If = I.astype(np.float32)
+    Jf = J.astype(np.float32)
+    ksize = 2 * W2 + 1
+
+    best_ssd = np.full((h, w), np.inf, dtype=np.float32)
+    u = np.zeros((h, w), dtype=np.float32)
+    v = np.zeros((h, w), dtype=np.float32)
+
+    for dy in range(-dY, dY + 1):
+        for dx in range(-dX, dX + 1):
+            M = np.float32([[1, 0, dx], [0, 1, dy]])
+            J_shift = cv2.warpAffine(Jf, M, (w, h),
+                                     flags=cv2.INTER_NEAREST,
+                                     borderMode=cv2.BORDER_REPLICATE)
+            sq = (J_shift - If) ** 2
+            ssd = cv2.boxFilter(sq, ddepth=-1, ksize=(ksize, ksize),
+                                normalize=False, borderType=cv2.BORDER_ISOLATED)
+            better = ssd < best_ssd
+            best_ssd = np.where(better, ssd, best_ssd)
+            u = np.where(better, np.float32(dx), u)
+            v = np.where(better, np.float32(dy), v)
+
+    u[:W2, :] = 0; u[-W2:, :] = 0; u[:, :W2] = 0; u[:, -W2:] = 0
+    v[:W2, :] = 0; v[-W2:, :] = 0; v[:, :W2] = 0; v[:, -W2:] = 0
     return u, v
 
 
