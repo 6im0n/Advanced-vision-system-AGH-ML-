@@ -11,8 +11,8 @@ import cv2
 SCALE_FACTOR = 1  # div: 1=same, 2=half, 4=quart
 PATCH_SIZE = 7    ## must be odd; W2 = PATCH_SIZE // 2
 SEARCH_RANGE = 3  # dX = dY = SEARCH_RANGE axis
-THRESHOLD = 10
-MAX_SCALE = 3    # pyramid levels
+THRESHOLD = 30
+MAX_SCALE = 2    # pyramid levels
 
 def block_method(I, J, W2=3, dX=3, dY=3):
     h, w = I.shape
@@ -33,7 +33,7 @@ def block_method(I, J, W2=3, dX=3, dY=3):
                                      borderMode=cv2.BORDER_REPLICATE)
             sq = (J_shift - If) ** 2
             ssd = cv2.boxFilter(sq, ddepth=-1, ksize=(ksize, ksize),
-                                normalize=False, borderType=cv2.BORDER_ISOLATED)
+                                normalize=False, borderType=cv2.BORDER_REPLICATE)
             better = ssd < best_ssd
             best_ssd = np.where(better, ssd, best_ssd)
             u = np.where(better, np.float32(dx), u)
@@ -89,12 +89,6 @@ def display_flow_quiver(img, u, v, step=8, scale=1.0, color=(0, 255, 0)):
     return out
 
 
-def display_image_diff(image):
-    cv2.absdiff(image.astype(np.uint8), image.astype(np.bool))
-    cv2.imshow("Image", image)
-    cv2.waitKey(0)
-
-
 def downscale_img(img):
     if SCALE_FACTOR != 1:
         width = max(1, img.shape[1] // SCALE_FACTOR)
@@ -124,28 +118,8 @@ def ask_user_images():
     return [files[int(c) - 1] for c in choices]
 
 
-def cv_display_images(I, J, bgr, arrows):
-    cv2.namedWindow("frame I", cv2.WINDOW_NORMAL)
-    cv2.imshow("frame I", I)
-    cv2.namedWindow("frame J", cv2.WINDOW_NORMAL)
-    cv2.imshow("frame J", J)
-    cv2.namedWindow("frame BGR", cv2.WINDOW_NORMAL)
-    cv2.imshow("frame BGR", bgr)
-    cv2.namedWindow("frame Arrows", cv2.WINDOW_NORMAL)
-    cv2.imshow("frame Arrows", arrows)
-
-def of(J_org, I, J, W2=3, dY=3, dX=3):
-    u, v = block_method(I, J, W2=W2, dX=dX, dY=dY)
-    diff = cv2.absdiff(I, J)
-    cv2.namedWindow("of: J_org", cv2.WINDOW_NORMAL)
-    cv2.imshow("of: J_org", J_org)
-    cv2.namedWindow("of: I", cv2.WINDOW_NORMAL)
-    cv2.imshow("of: I", I)
-    cv2.namedWindow("of: J (warped)", cv2.WINDOW_NORMAL)
-    cv2.imshow("of: J (warped)", J)
-    cv2.namedWindow("of: |I-J|", cv2.WINDOW_NORMAL)
-    cv2.imshow("of: |I-J|", diff)
-    return u, v
+def of(I, J, W2=3, dY=3, dX=3):
+    return block_method(I, J, W2=W2, dX=dX, dY=dY)
 
 
 def vis_flow(u, v, YX, name):
@@ -164,43 +138,70 @@ def pyramid(im, max_scale):
 
 def warp_with_flow(J, u, v):
     h, w = J.shape
-    J_new = J.copy()
-    for j in range(h):
-        for i in range(w):
-            jj = int(round(j + v[j, i]))
-            ii = int(round(i + u[j, i]))
-            if 0 <= jj < h and 0 <= ii < w:
-                J_new[j, i] = J[jj, ii]
-    return J_new
+    xs, ys = np.meshgrid(np.arange(w, dtype=np.float32),
+                         np.arange(h, dtype=np.float32))
+    map_x = xs + u.astype(np.float32)
+    map_y = ys + v.astype(np.float32)
+    return cv2.remap(J, map_x, map_y,
+                     interpolation=cv2.INTER_LINEAR,
+                     borderMode=cv2.BORDER_REPLICATE)
 
 
 def multiscale_of(I_in, J_in, W2=3, dX=3, dY=3, max_scale=3):
     IP = pyramid(I_in, max_scale)
     JP = pyramid(J_in, max_scale)
-    H, W = I_in.shape
-    u_total = np.zeros((H, W), dtype=np.float32)
-    v_total = np.zeros((H, W), dtype=np.float32)
 
-    J = JP[-1]
+    h_top, w_top = IP[-1].shape
+    u_acc = np.zeros((h_top, w_top), dtype=np.float32)
+    v_acc = np.zeros((h_top, w_top), dtype=np.float32)
+
     for s in range(max_scale - 1, -1, -1):
         I = IP[s]
-        u, v = of(J_in, I, J, W2=W2, dY=dY, dX=dX)
-
-        u_up = cv2.resize((2 ** s) * u, (W, H), interpolation=cv2.INTER_LINEAR)
-        v_up = cv2.resize((2 ** s) * v, (W, H), interpolation=cv2.INTER_LINEAR)
-        u_total += u_up
-        v_total += v_up
+        J = JP[s]
+        J_warped = warp_with_flow(J, u_acc, v_acc)
+        u, v = of(I, J_warped, W2=W2, dY=dY, dX=dX)
+        u_acc += u
+        v_acc += v
 
         if s > 0:
-            J_next = JP[s - 1].copy()
-            u_next = cv2.resize(2 * u, (0, 0), fx=2, fy=2,
-                                interpolation=cv2.INTER_LINEAR)
-            v_next = cv2.resize(2 * v, (0, 0), fx=2, fy=2,
-                                interpolation=cv2.INTER_LINEAR)
-            J_next = warp_with_flow(J_next, u_next, v_next)
-            J = J_next
+            h_next, w_next = IP[s - 1].shape
+            u_acc = cv2.resize(2.0 * u_acc, (w_next, h_next),
+                               interpolation=cv2.INTER_LINEAR)
+            v_acc = cv2.resize(2.0 * v_acc, (w_next, h_next),
+                               interpolation=cv2.INTER_LINEAR)
 
-    return u_total, v_total
+    return u_acc, v_acc
+
+
+def stack_grid(tiles, cols=3, pad=4, bg=0):
+    h = max(t.shape[0] for t in tiles)
+    w = max(t.shape[1] for t in tiles)
+    norm = []
+    for t in tiles:
+        if t.ndim == 2:
+            t = cv2.cvtColor(t, cv2.COLOR_GRAY2BGR)
+        if t.shape[0] != h or t.shape[1] != w:
+            t = cv2.resize(t, (w, h), interpolation=cv2.INTER_NEAREST)
+        norm.append(t)
+    rows = []
+    for r in range(0, len(norm), cols):
+        row_tiles = norm[r:r + cols]
+        while len(row_tiles) < cols:
+            row_tiles.append(np.full((h, w, 3), bg, dtype=np.uint8))
+        row = np.hstack([np.pad(t, ((pad, pad), (pad, pad), (0, 0)),
+                                constant_values=bg) for t in row_tiles])
+        rows.append(row)
+    return np.vstack(rows)
+
+
+def label(tile, text):
+    if tile.ndim == 2:
+        tile = cv2.cvtColor(tile, cv2.COLOR_GRAY2BGR)
+    out = tile.copy()
+    cv2.rectangle(out, (0, 0), (out.shape[1], 22), (0, 0, 0), -1)
+    cv2.putText(out, text, (4, 16), cv2.FONT_HERSHEY_SIMPLEX,
+                0.5, (255, 255, 255), 1, cv2.LINE_AA)
+    return out
 
 
 def main():
@@ -221,17 +222,25 @@ def main():
     print(f"mask nonzero pixels: {int(np.count_nonzero(mask))} / {mask.size}")
     u, v = filter_flow(u_raw, v_raw, mask)
 
-    vis_flow(u_raw, v_raw, I.shape, "of raw (no filter, no swap)")
+    diff = cv2.absdiff(I, J)
+    bgr_raw = flow_to_hsv(u_raw, v_raw, swap_sv=True)
     bgr_white = flow_to_hsv(u_raw, v_raw, swap_sv=False)
-    cv2.namedWindow("of raw white-bg", cv2.WINDOW_NORMAL)
-    cv2.imshow("of raw white-bg", bgr_white)
-
-    vis_flow(u, v, I.shape, f"of filtered ({MAX_SCALE} scales)")
+    bgr_filt = flow_to_hsv(u, v, swap_sv=True)
     arrows = display_flow_quiver(I, u, v, step=8, scale=2.0)
-    cv2.namedWindow("arrows", cv2.WINDOW_NORMAL)
-    cv2.imshow("arrows", arrows)
-    cv2.namedWindow("diff mask", cv2.WINDOW_NORMAL)
-    cv2.imshow("diff mask", mask)
+
+    tiles = [
+        label(I, "I"),
+        label(J, "J"),
+        label(diff, "|I-J|"),
+        label(bgr_raw, "flow raw (black bg)"),
+        label(bgr_white, "flow raw (white bg)"),
+        label(bgr_filt, f"flow filtered ({MAX_SCALE} scales)"),
+        label(mask, "diff mask"),
+        label(arrows, "arrows"),
+    ]
+    grid = stack_grid(tiles, cols=3)
+    cv2.namedWindow("lab7_2 multiscale OF", cv2.WINDOW_NORMAL)
+    cv2.imshow("lab7_2 multiscale OF", grid)
 
     cv2.waitKey(0)
     cv2.destroyAllWindows()
