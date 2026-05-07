@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 from .config import CFG
-from .siamfc import SiamEmbedder, crop_exemplar, cosine_sim_matrix
+from .siamfc import SiamEmbedder, crop_person, cosine_sim_matrix
 
 
 @dataclass
@@ -77,8 +77,7 @@ class MOTTracker:
 
         # 2. Embed current detections
         det_xywh = dets_xywhs[:, :4] if dets_xywhs.size else np.zeros((0, 4), dtype=np.float32)
-        crops = [crop_exemplar(frame_bgr, b, CFG.exemplar_size, CFG.context_amount)
-                 for b in det_xywh]
+        crops = [crop_person(frame_bgr, b) for b in det_xywh]
         det_feats = self.embedder.embed(crops)
 
         # 3. Cost matrix and Hungarian

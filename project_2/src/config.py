@@ -25,7 +25,7 @@ TEST_DIR = DATA_DIR / "evs_mot-test"
 WEIGHTS_DIR = ROOT / "weights"
 RESULTS_DIR = ROOT / "results"
 TRACKEVAL_DIR = ROOT / "trackeval_workdir"
-REID_WEIGHTS = WEIGHTS_DIR / "reid_resnet18.pth"
+REID_WEIGHTS = WEIGHTS_DIR / "reid_resnet50.pth"
 
 WEIGHTS_DIR.mkdir(exist_ok=True)
 RESULTS_DIR.mkdir(exist_ok=True)
@@ -38,10 +38,10 @@ class TrackerCfg:
     det_class_id: int = 1            # COCO person
     det_nms_iou: float = 0.5
 
-    # SiamFC
-    exemplar_size: int = 127
-    instance_size: int = 255
-    context_amount: float = 0.5
+    # Appearance encoder
+    crop_h: int = 256                # person ReID standard
+    crop_w: int = 128
+    context_amount: float = 0.1      # less padding for tall person crops
     siam_weights: str = str(WEIGHTS_DIR / "siamfc_alexnet_e50.pth")
 
     # Track lifecycle
