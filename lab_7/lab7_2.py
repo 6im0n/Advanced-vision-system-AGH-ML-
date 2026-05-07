@@ -12,7 +12,7 @@ SCALE_FACTOR = 1  # div: 1=same, 2=half, 4=quart
 PATCH_SIZE = 7    ## must be odd; W2 = PATCH_SIZE // 2
 SEARCH_RANGE = 3  # dX = dY = SEARCH_RANGE axis
 THRESHOLD = 30
-MAX_SCALE = 2    # pyramid levels
+MAX_SCALE = 4    # pyramid levels
 
 def block_method(I, J, W2=3, dX=3, dY=3):
     h, w = I.shape
@@ -36,8 +36,8 @@ def block_method(I, J, W2=3, dX=3, dY=3):
                                 normalize=False, borderType=cv2.BORDER_REPLICATE)
             better = ssd < best_ssd
             best_ssd = np.where(better, ssd, best_ssd)
-            u = np.where(better, np.float32(dx), u)
-            v = np.where(better, np.float32(dy), v)
+            u = np.where(better, np.float32(-dx), u)
+            v = np.where(better, np.float32(-dy), v)
 
     # zero out borders where window goes out
     u[:W2, :] = 0; u[-W2:, :] = 0; u[:, :W2] = 0; u[:, -W2:] = 0

@@ -8,10 +8,11 @@ import cv2
 # this method is not efficient is to understand the concept of optical flow, but it is not used in real applications because of its slowness and inaccuracy (it is a block method, not a pixel method)
 # this method use large value for dy and dy... and
 
-SCALE_FACTOR = 2  # div: 1=same, 2=half, 4=quart
-PATCH_SIZE = 7    ## must be odd; W2 = PATCH_SIZE // 2
-SEARCH_RANGE = 3  # dX = dY = SEARCH_RANGE axis
-THRESHOLD = 10
+SCALE_FACTOR = 1  # div: 1=same, 2=half, 4=quart
+PATCH_SIZE = 14    ## must be odd; W2 = PATCH_SIZE // 2
+SEARCH_RANGE = 7  # dX = dY = SEARCH_RANGE axis
+THRESHOLD = 15
+#change the axis Y/X
 
 def block_method(I, J, W2=3, dX=3, dY=3):
     h, w = I.shape
@@ -34,8 +35,8 @@ def block_method(I, J, W2=3, dX=3, dY=3):
                                 normalize=False, borderType=cv2.BORDER_ISOLATED)
             better = ssd < best_ssd
             best_ssd = np.where(better, ssd, best_ssd)
-            u = np.where(better, np.float32(dx), u)
-            v = np.where(better, np.float32(dy), v)
+            u = np.where(better, np.float32(-dx), u)
+            v = np.where(better, np.float32(-dy), v)
 
     u[:W2, :] = 0; u[-W2:, :] = 0; u[:, :W2] = 0; u[:, -W2:] = 0
     v[:W2, :] = 0; v[-W2:, :] = 0; v[:, :W2] = 0; v[:, -W2:] = 0
