@@ -7,20 +7,25 @@ from torchvision.models.detection import (
     fasterrcnn_resnet50_fpn,
     FasterRCNN_ResNet50_FPN_Weights,
 )
-from .config import CFG, DEVICE
+from .config import CFG, DEVICE, use_amp
 
 
 class FasterRCNNDetector:
     def __init__(self):
         weights = FasterRCNN_ResNet50_FPN_Weights.DEFAULT
         self.model = fasterrcnn_resnet50_fpn(weights=weights).to(DEVICE).eval()
+        self._amp = use_amp(DEVICE)
 
     @torch.no_grad()
     def detect(self, frame_bgr: np.ndarray) -> np.ndarray:
         """Frame BGR → ndarray[N, 5]: x, y, w, h, score (filtered to person class)."""
         rgb = frame_bgr[:, :, ::-1].copy()
-        tensor = TF.to_tensor(rgb).to(DEVICE)
-        out = self.model([tensor])[0]
+        tensor = TF.to_tensor(rgb).to(DEVICE, non_blocking=True)
+        if self._amp:
+            with torch.autocast(device_type="cuda", dtype=torch.float16):
+                out = self.model([tensor])[0]
+        else:
+            out = self.model([tensor])[0]
         boxes = out["boxes"].detach().cpu().numpy()
         scores = out["scores"].detach().cpu().numpy()
         labels = out["labels"].detach().cpu().numpy()

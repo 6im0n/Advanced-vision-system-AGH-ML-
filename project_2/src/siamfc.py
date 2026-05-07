@@ -19,7 +19,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
 import cv2
-from .config import CFG, DEVICE
+from pathlib import Path
+from .config import CFG, DEVICE, use_amp, REID_WEIGHTS
 
 
 _IMAGENET_MEAN = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
@@ -86,10 +87,21 @@ class SiamEmbedder:
 
     def __init__(self, weights_path: str | None = None):
         self.net = _ResNet18Trunk().to(DEVICE).eval()
-        # weights_path kept for API compatibility but ignored — ResNet18 is preloaded.
         self._mean = _IMAGENET_MEAN.to(DEVICE)
         self._std = _IMAGENET_STD.to(DEVICE)
-        print(f"[siamfc] ResNet18 (ImageNet) encoder ready on {DEVICE}, dim={self.EMBED_DIM}")
+        self._amp = use_amp(DEVICE)
+
+        # Auto-load finetuned ReID weights if user has trained them.
+        path = Path(weights_path) if weights_path else REID_WEIGHTS
+        if path.exists():
+            sd = torch.load(path, map_location=DEVICE)
+            missing, unexpected = self.net.load_state_dict(sd, strict=False)
+            print(f"[siamfc] loaded finetuned ReID weights {path}  "
+                  f"(missing={len(missing)}, unexpected={len(unexpected)})")
+        else:
+            print(f"[siamfc] no finetuned weights at {path} — using ImageNet pretrained")
+
+        print(f"[siamfc] ResNet18 encoder ready on {DEVICE}, dim={self.EMBED_DIM}, amp={self._amp}")
 
     @torch.no_grad()
     def embed(self, crops_bgr: list[np.ndarray]) -> np.ndarray:
@@ -97,9 +109,14 @@ class SiamEmbedder:
         if len(crops_bgr) == 0:
             return np.zeros((0, self.EMBED_DIM), dtype=np.float32)
         rgb = [c[:, :, ::-1].astype(np.float32) / 255.0 for c in crops_bgr]
-        x = torch.from_numpy(np.stack(rgb)).permute(0, 3, 1, 2).to(DEVICE)
+        x = torch.from_numpy(np.stack(rgb)).permute(0, 3, 1, 2).to(DEVICE, non_blocking=True)
         x = (x - self._mean) / self._std
-        feat = self.net(x)
+        if self._amp:
+            with torch.autocast(device_type="cuda", dtype=torch.float16):
+                feat = self.net(x)
+            feat = feat.float()
+        else:
+            feat = self.net(x)
         feat = F.normalize(feat, dim=1)
         return feat.detach().cpu().numpy()
 

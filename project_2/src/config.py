@@ -8,8 +8,14 @@ import torch
 def pick_device() -> torch.device:
     """CUDA if available, otherwise CPU."""
     if torch.cuda.is_available():
+        # Speedup: pick fastest conv algos for fixed input shapes
+        torch.backends.cudnn.benchmark = True
         return torch.device("cuda")
     return torch.device("cpu")
+
+
+def use_amp(device: torch.device) -> bool:
+    return device.type == "cuda"
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -19,6 +25,7 @@ TEST_DIR = DATA_DIR / "evs_mot-test"
 WEIGHTS_DIR = ROOT / "weights"
 RESULTS_DIR = ROOT / "results"
 TRACKEVAL_DIR = ROOT / "trackeval_workdir"
+REID_WEIGHTS = WEIGHTS_DIR / "reid_resnet18.pth"
 
 WEIGHTS_DIR.mkdir(exist_ok=True)
 RESULTS_DIR.mkdir(exist_ok=True)
