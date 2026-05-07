@@ -5,3 +5,4 @@ scipy
 opencv-contrib-python
 imutils
 jupyter
+torch
