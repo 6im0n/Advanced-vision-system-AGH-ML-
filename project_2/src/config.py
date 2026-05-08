@@ -34,12 +34,7 @@ RESULTS_DIR.mkdir(exist_ok=True)
 # COCO class id (torchvision FRCNN) → MOT-Challenge class id mapping.
 # Only entries listed here are kept by the detector.
 COCO_TO_MOT_CLASS = {
-    1: 1,   # person       → pedestrian
-    2: 4,   # bicycle      → bicycle
-    3: 3,   # car          → car
-    4: 5,   # motorcycle   → motorbike
-    6: 3,   # bus          → car (treated as wheeled vehicle)
-    8: 3,   # truck        → car
+    1: 1,   # person → pedestrian (only class scored on Codabench)
 }
 FG_MOT_CLASSES = (1, 2, 3, 4, 5, 6)
 MOT_CLASS_NAMES = {1: "ped", 2: "ped-veh", 3: "car", 4: "bike", 5: "moto", 6: "veh"}
@@ -48,8 +43,8 @@ MOT_CLASS_NAMES = {1: "ped", 2: "ped-veh", 3: "car", 4: "bike", 5: "moto", 6: "v
 @dataclass
 class TrackerCfg:
     # Detector
-    det_score_th: float = 0.5
-    det_nms_iou: float = 0.5
+    det_score_th: float = 0.6
+    det_nms_iou: float = 0.4
 
     # Appearance encoder
     crop_h: int = 256                # person ReID standard
@@ -58,9 +53,9 @@ class TrackerCfg:
     siam_weights: str = str(WEIGHTS_DIR / "siamfc_alexnet_e50.pth")
 
     # Track lifecycle
-    n_init: int = 2
-    max_age: int = 60                # frames a confirmed track stays "active" while unmatched
-    lost_max_age: int = 120          # frames a "lost" track waits for resurrection
+    n_init: int = 3
+    max_age: int = 30                # frames a confirmed track stays "active" while unmatched
+    lost_max_age: int = 60           # frames a "lost" track waits for resurrection
 
     # Association weights (single-pass Hungarian)
     w_iou: float = 0.3
