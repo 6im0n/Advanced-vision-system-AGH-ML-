@@ -41,8 +41,10 @@ def _build_tracker(name: str, embedder, frame_rate: int):
     raise ValueError(f"unknown tracker: {name}")
 
 
-def run_track(seq_dir: Path, save_video: bool, tracker_name: str = "botsort"):
+def run_track(seq_dir: Path, save_video: bool, tracker_name: str = "botsort",
+              profile: bool = False):
     """Full tracker run: detector → tracker → write MOT txt + video."""
+    import time
     from src.detector import FasterRCNNDetector
     from src.siamfc import SiamEmbedder
 
@@ -56,10 +58,16 @@ def run_track(seq_dir: Path, save_video: bool, tracker_name: str = "botsort"):
 
     rows = []
     writer = _open_writer(info, "track") if save_video else None
+    timings = {"io": 0.0, "det": 0.0, "track": 0.0, "draw": 0.0, "total": 0.0}
+    n_frames = 0
     try:
+        t_prev = time.perf_counter()
         for fi, frame in tqdm(frame_iter(seq_dir), total=info["seq_length"]):
+            t_io = time.perf_counter()
             dets = detector.detect(frame)
+            t_det = time.perf_counter()
             active = tracker.update(frame, dets, fi)
+            t_trk = time.perf_counter()
             for t in active:
                 if not t.emitted:
                     for f_buf, bb in t.bbox_history:
@@ -72,13 +80,28 @@ def run_track(seq_dir: Path, save_video: bool, tracker_name: str = "botsort"):
                     x, y, w, h = t.bbox
                     rows.append((fi, t.track_id, x, y, w, h, 1.0, t.cls_id))
             if writer is not None:
-                # Render only tracks matched on this frame; predicted-only
-                # tracks survive internally but are not drawn (avoids ghost boxes).
                 drawable = [t for t in active if t.age == 0]
                 writer.write(viz.draw_tracks(frame, drawable, CFG.draw_trajectory))
+            t_end = time.perf_counter()
+            timings["io"] += t_io - t_prev
+            timings["det"] += t_det - t_io
+            timings["track"] += t_trk - t_det
+            timings["draw"] += t_end - t_trk
+            timings["total"] += t_end - t_prev
+            n_frames += 1
+            t_prev = time.perf_counter()
     finally:
         if writer is not None:
             writer.close()
+
+    if profile and n_frames > 0:
+        print(f"[profile] avg ms/frame over {n_frames} frames "
+              f"(total {timings['total']*1000/n_frames:.1f}ms = "
+              f"{n_frames/timings['total']:.1f} fps):")
+        for k in ("io", "det", "track", "draw"):
+            ms = timings[k] * 1000 / n_frames
+            pct = 100 * timings[k] / timings["total"]
+            print(f"  {k:>6}: {ms:6.1f} ms  ({pct:4.1f}%)")
 
     out_txt = RESULTS_DIR / f"{info['name']}.txt"
     write_mot_results(out_txt, rows)
@@ -166,6 +189,8 @@ def main():
     ap.add_argument("--tracker", default="botsort", choices=["botsort", "legacy"],
                     help="association backend (default: botsort)")
     ap.add_argument("--no-video", action="store_true")
+    ap.add_argument("--profile", action="store_true",
+                    help="print per-stage timing breakdown")
     ap.add_argument("--eval", action="store_true",
                     help="run TrackEval after tracking (only valid for train split)")
     args = ap.parse_args()
@@ -174,7 +199,8 @@ def main():
 
     for sd in seq_dirs:
         if args.mode == "track":
-            run_track(sd, save_video=not args.no_video, tracker_name=args.tracker)
+            run_track(sd, save_video=not args.no_video,
+                      tracker_name=args.tracker, profile=args.profile)
         elif args.mode == "gt":
             if not (sd / "gt" / "gt.txt").exists():
                 print(f"[skip] {sd.name}: no GT (test split)")

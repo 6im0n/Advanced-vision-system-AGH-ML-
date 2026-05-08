@@ -79,6 +79,12 @@ def _stub_cython_bbox() -> None:
 
 
 def _bootstrap_botsort() -> None:
+    if not (_BOTSORT_DIR / "tracker" / "bot_sort.py").exists():
+        raise ModuleNotFoundError(
+            f"BoT-SORT not vendored at {_BOTSORT_DIR}. Clone it:\n"
+            f"  git clone --depth 1 https://github.com/NirAharon/BoT-SORT.git "
+            f"{_BOTSORT_DIR}"
+        )
     if str(_BOTSORT_DIR) not in sys.path:
         sys.path.insert(0, str(_BOTSORT_DIR))
     _patch_numpy_aliases()
