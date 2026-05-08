@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import cv2
 import numpy as np
+from .config import MOT_CLASS_NAMES
 
 _PALETTE = [
     (31, 119, 180), (255, 127, 14), (44, 160, 44), (214, 39, 40),
@@ -20,8 +21,10 @@ def draw_tracks(frame, tracks, draw_trail: bool = True):
     for t in tracks:
         x, y, w, h = t.bbox
         col = color_for_id(t.track_id)
+        cls_name = MOT_CLASS_NAMES.get(getattr(t, "cls_id", 1), "?")
+        label = f"ID{t.track_id} {cls_name}"
         cv2.rectangle(img, (int(x), int(y)), (int(x + w), int(y + h)), col, 2)
-        cv2.putText(img, f"ID{t.track_id}", (int(x), max(0, int(y) - 6)),
+        cv2.putText(img, label, (int(x), max(0, int(y) - 6)),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, col, 2)
         if draw_trail and len(t.history) > 1:
             pts = np.array(t.history, np.int32)

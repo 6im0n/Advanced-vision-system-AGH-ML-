@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 import torch
 from torch.utils.data import Dataset, Sampler
-from .config import CFG, TRAIN_DIR
+from .config import CFG, TRAIN_DIR, FG_MOT_CLASSES
 from .io_mot import load_seqinfo, parse_mot_csv
 from .siamfc import crop_person
 
@@ -43,7 +43,9 @@ class MOTReIDDataset(Dataset):
             if gt.size == 0:
                 continue
             # MOT format: frame,id,x,y,w,h,conf,class,vis
-            keep = (gt[:, 6] > 0) & (gt[:, 7] == 1)
+            # Keep eval-considered foreground classes (1=ped, 2=ped-veh, 3=car,
+            # 4=bicycle, 5=motorbike, 6=non-mot vehicle); drop distractors 7-12.
+            keep = (gt[:, 6] > 0) & np.isin(gt[:, 7].astype(int), FG_MOT_CLASSES)
             gt = gt[keep]
             for row in gt:
                 frame = int(row[0])

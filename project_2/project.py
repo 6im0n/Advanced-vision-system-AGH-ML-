@@ -49,10 +49,18 @@ def run_track(seq_dir: Path, save_video: bool):
     try:
         for fi, frame in tqdm(frame_iter(seq_dir), total=info["seq_length"]):
             dets = detector.detect(frame)
-            active = tracker.update(frame, dets)
+            active = tracker.update(frame, dets, fi)
             for t in active:
-                x, y, w, h = t.bbox
-                rows.append((fi, t.track_id, x, y, w, h, 1.0))
+                if not t.emitted:
+                    for f_buf, bb in t.bbox_history:
+                        rows.append((f_buf, t.track_id,
+                                     float(bb[0]), float(bb[1]),
+                                     float(bb[2]), float(bb[3]), 1.0, t.cls_id))
+                    t.emitted = True
+                    t.bbox_history.clear()
+                else:
+                    x, y, w, h = t.bbox
+                    rows.append((fi, t.track_id, x, y, w, h, 1.0, t.cls_id))
             if writer is not None:
                 # Render only tracks matched on this frame; predicted-only
                 # tracks survive internally but are not drawn (avoids ghost boxes).

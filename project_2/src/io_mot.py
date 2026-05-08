@@ -48,11 +48,19 @@ def filter_frame(arr: np.ndarray, frame_idx: int) -> np.ndarray:
 
 
 def write_mot_results(path: Path, rows):
-    """rows: iterable of (frame, id, x, y, w, h, conf). Writes MOT-Challenge format."""
+    """rows: iterable of (frame, id, x, y, w, h, conf, cls).
+
+    Writes MOT-Challenge format. `cls` is the MOT class id (1=ped, 3=car, ...).
+    """
     with open(path, "w") as f:
-        for frame, tid, x, y, w, h, conf in rows:
+        for row in rows:
+            if len(row) == 8:
+                frame, tid, x, y, w, h, conf, cls = row
+            else:
+                frame, tid, x, y, w, h, conf = row
+                cls = 1
             f.write(
                 f"{int(frame)},{int(tid)},"
                 f"{x:.2f},{y:.2f},{w:.2f},{h:.2f},"
-                f"{conf:.2f},-1,-1,-1\n"
+                f"{conf:.2f},{int(cls)},-1,-1\n"
             )

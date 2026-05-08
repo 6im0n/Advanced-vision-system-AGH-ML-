@@ -54,7 +54,10 @@ def run_eval(tracker_name: str = "SiamMOT"):
     dataset_config["GT_FOLDER"] = str(TRACKEVAL_DIR / "gt" / "mot_challenge")
     dataset_config["TRACKERS_FOLDER"] = str(TRACKEVAL_DIR / "trackers" / "mot_challenge")
     dataset_config["TRACKERS_TO_EVAL"] = [tracker_name]
-    dataset_config["DO_PREPROC"] = False
+    # MOT-Challenge style preprocessing: filters distractor classes (7-12) and
+    # restricts evaluation to CLASSES_TO_EVAL (default 'pedestrian'). Requires
+    # the class column in our predictions to be the MOT-Challenge class id.
+    dataset_config["DO_PREPROC"] = True
 
     metrics_config = {"METRICS": ["CLEAR", "Identity"], "THRESHOLD": 0.5}
 
