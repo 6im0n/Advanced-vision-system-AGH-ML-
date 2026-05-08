@@ -19,12 +19,19 @@ class Track:
     history: list = field(default_factory=list)
 
     def predict(self):
-        self.bbox = self.bbox + self.velocity
+        # Only propagate position (x, y); freeze size (w, h) during prediction.
+        # Decay velocity to avoid drift during long misses.
+        step = self.velocity.copy()
+        step[2:] = 0.0
+        self.bbox = self.bbox + step
+        self.velocity *= 0.9
         self.age += 1
 
     def update(self, det_bbox: np.ndarray, det_feat: np.ndarray):
         v = det_bbox - self.bbox
-        self.velocity = 0.5 * self.velocity + 0.5 * v
+        # Only smooth position velocity; size taken straight from detection.
+        self.velocity[:2] = 0.5 * self.velocity[:2] + 0.5 * v[:2]
+        self.velocity[2:] = 0.0
         self.bbox = det_bbox.copy()
 
         feat = CFG.ema_alpha * self.feat + (1.0 - CFG.ema_alpha) * det_feat

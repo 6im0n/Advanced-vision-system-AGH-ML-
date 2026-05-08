@@ -54,7 +54,10 @@ def run_track(seq_dir: Path, save_video: bool):
                 x, y, w, h = t.bbox
                 rows.append((fi, t.track_id, x, y, w, h, 1.0))
             if writer is not None:
-                writer.write(viz.draw_tracks(frame, active, CFG.draw_trajectory))
+                # Render only tracks matched on this frame; predicted-only
+                # tracks survive internally but are not drawn (avoids ghost boxes).
+                drawable = [t for t in active if t.age == 0]
+                writer.write(viz.draw_tracks(frame, drawable, CFG.draw_trajectory))
     finally:
         if writer is not None:
             writer.close()

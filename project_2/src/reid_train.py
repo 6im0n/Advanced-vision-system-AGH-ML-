@@ -16,7 +16,7 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from tqdm import tqdm
 
-from .config import DEVICE, WEIGHTS_DIR
+from .config import DEVICE, REID_WEIGHTS
 from .reid_dataset import MOTReIDDataset, PKSampler
 from .reid_model import ReIDNet
 
@@ -50,7 +50,7 @@ def main():
     ap.add_argument("--lambda_ce", type=float, default=1.0)
     ap.add_argument("--lambda_tri", type=float, default=1.0)
     ap.add_argument("--workers", type=int, default=4)
-    ap.add_argument("--out", default=str(WEIGHTS_DIR / "reid_resnet18.pth"))
+    ap.add_argument("--out", default=str(REID_WEIGHTS))
     args = ap.parse_args()
 
     print(f"[device] {DEVICE}")

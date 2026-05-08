@@ -104,7 +104,7 @@ class SiamEmbedder:
         # Auto-load finetuned ReID weights if user has trained them.
         path = Path(weights_path) if weights_path else REID_WEIGHTS
         if path.exists():
-            sd = torch.load(path, map_location=DEVICE)
+            sd = torch.load(path, map_location=DEVICE, weights_only=True)
             missing, unexpected = self.net.load_state_dict(sd, strict=False)
             print(f"[siamfc] loaded finetuned ReID weights {path}  "
                   f"(missing={len(missing)}, unexpected={len(unexpected)})")
