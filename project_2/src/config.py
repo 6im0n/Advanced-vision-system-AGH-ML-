@@ -89,8 +89,8 @@ class BotSortCfg:
 
     # ReID + CMC
     with_reid: bool = True
-    cmc_method: str = "ecc"          # ecc | orb | sparseOptFlow | none
-    gmc_downscale: int = 4           # downscale factor for ECC speed
+    cmc_method: str = "sparseOptFlow"
+    gmc_downscale: int = 2
 
     # Misc BoT-SORT flags
     mot20: bool = False              # disables fuse_score, used for crowded scenes
