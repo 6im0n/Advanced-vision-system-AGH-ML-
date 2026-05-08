@@ -102,6 +102,10 @@ def run_track(seq_dir: Path, save_video: bool, tracker_name: str = "botsort",
             ms = timings[k] * 1000 / n_frames
             pct = 100 * timings[k] / timings["total"]
             print(f"  {k:>6}: {ms:6.1f} ms  ({pct:4.1f}%)")
+        enc = getattr(getattr(tracker, "_inner", None), "encoder", None)
+        if enc is not None and hasattr(enc, "t_embed"):
+            print(f"  [reid] crop:  {enc.t_crop*1000/n_frames:6.1f} ms  "
+                  f"embed: {enc.t_embed*1000/n_frames:6.1f} ms")
 
     out_txt = RESULTS_DIR / f"{info['name']}.txt"
     write_mot_results(out_txt, rows)

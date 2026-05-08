@@ -106,16 +106,25 @@ class _SiamEncoder:
 
     def __init__(self, embedder: SiamEmbedder):
         self.embedder = embedder
+        self.t_crop = 0.0
+        self.t_embed = 0.0
 
     def inference(self, img: np.ndarray, dets: np.ndarray) -> np.ndarray:
+        import time
         if len(dets) == 0:
             return np.zeros((0, SiamEmbedder.EMBED_DIM), dtype=np.float32)
+        t0 = time.perf_counter()
         crops = []
         for box in dets[:, :4]:
             x1, y1, x2, y2 = box
             xywh = (float(x1), float(y1), float(x2 - x1), float(y2 - y1))
             crops.append(crop_person(img, xywh))
-        return self.embedder.embed(crops)
+        t1 = time.perf_counter()
+        out = self.embedder.embed(crops)
+        t2 = time.perf_counter()
+        self.t_crop += t1 - t0
+        self.t_embed += t2 - t1
+        return out
 
 
 class _BoTSORTNoFastReID(BoTSORT):
@@ -231,6 +240,7 @@ class MOTTracker:
     def update(self, frame_bgr: np.ndarray, dets: np.ndarray, frame_idx: int = 0) -> list[Track]:
         det_xyxy = self._to_xyxy_with_cls(dets)
         stracks = self._inner.update(det_xyxy, frame_bgr)
+        self.last_n_dets = len(det_xyxy)
 
         out: list[Track] = []
         live_ids = set()
