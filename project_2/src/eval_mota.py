@@ -36,7 +36,11 @@ def prepare_dirs(seq_dirs: list[Path], tracker_name: str = "SiamMOT"):
 
 def copy_results(tr_root: Path):
     for f in RESULTS_DIR.glob("*.txt"):
-        shutil.copy(f, tr_root / f.name)
+        with open(f) as src, open(tr_root / f.name, "w") as dst:
+            for line in src:
+                parts = line.strip().split(",")
+                if len(parts) >= 8 and int(float(parts[7])) == 1:
+                    dst.write(line)
 
 
 def run_eval(tracker_name: str = "SiamMOT"):

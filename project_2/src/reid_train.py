@@ -1,10 +1,10 @@
-"""Train ResNet18 ReID encoder on MOT GT (CE + batch-hard triplet).
+"""Train ConvNeXt-Small ReID encoder on MOT GT (CE + batch-hard triplet).
 
 Usage:
     python -m src.reid_train --seqs MOT_02 MOT_03 MOT_04 MOT_05 --epochs 30
     python -m src.reid_train --epochs 50 --P 16 --K 4 --iters_per_epoch 300
 
-Output: weights/reid_resnet18.pth — auto-loaded by SiamEmbedder if present.
+Output: weights/reid_convnext_small.pth — auto-loaded by SiamEmbedder if present.
 """
 from __future__ import annotations
 import argparse

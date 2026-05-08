@@ -1,8 +1,8 @@
 """Siamese-style appearance embedder for MOT association.
 
-Architecture: ResNet50 (ImageNet pretrained) trunk → global avg pool →
-2048-D L2-normalized embedding. Auto-loads finetuned ReID weights from
-weights/reid_resnet50.pth if present.
+Architecture: ConvNeXt-Small (ImageNet pretrained) trunk → global avg pool →
+768-D L2-normalized embedding. Auto-loads finetuned ReID weights from
+weights/reid_convnext_small.pth if present.
 
 Public API
 ----------
