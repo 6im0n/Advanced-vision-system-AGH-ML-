@@ -66,37 +66,33 @@ def crop_person(frame_bgr: np.ndarray, bbox_xywh, target_hw=None, context: float
 crop_exemplar = crop_person
 
 
-class _ResNet50Trunk(nn.Module):
-    """ResNet50 stem + layer1..4 + global avg pool → 2048-D embedding."""
+class _ConvNeXtSmallTrunk(nn.Module):
+    """ConvNeXt-Small features + avgpool + LayerNorm → 768-D embedding."""
 
     def __init__(self):
         super().__init__()
-        bb = torchvision.models.resnet50(
-            weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2
+        bb = torchvision.models.convnext_small(
+            weights=torchvision.models.ConvNeXt_Small_Weights.IMAGENET1K_V1
         )
-        self.stem = nn.Sequential(bb.conv1, bb.bn1, bb.relu, bb.maxpool)
-        self.layer1 = bb.layer1
-        self.layer2 = bb.layer2
-        self.layer3 = bb.layer3
-        self.layer4 = bb.layer4
-        self.pool = nn.AdaptiveAvgPool2d(1)
+        self.features = bb.features
+        self.avgpool = bb.avgpool
+        self.norm = bb.classifier[0]              # LayerNorm2d on B×C×1×1
+        self.flatten = bb.classifier[1]           # Flatten
 
     def forward(self, x):
-        x = self.stem(x)
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
-        return self.pool(x).flatten(1)            # [N, 2048]
+        x = self.features(x)
+        x = self.avgpool(x)
+        x = self.norm(x)
+        return self.flatten(x)                    # [N, 768]
 
 
 class SiamEmbedder:
-    """ResNet50 encoder → L2-normalized 2048-D appearance embedding."""
+    """ConvNeXt-Small encoder → L2-normalized 768-D appearance embedding."""
 
-    EMBED_DIM = 2048
+    EMBED_DIM = 768
 
     def __init__(self, weights_path: str | None = None):
-        self.net = _ResNet50Trunk().to(DEVICE).eval()
+        self.net = _ConvNeXtSmallTrunk().to(DEVICE).eval()
         self._mean = _IMAGENET_MEAN.to(DEVICE)
         self._std = _IMAGENET_STD.to(DEVICE)
         self._amp = use_amp(DEVICE)
@@ -111,7 +107,7 @@ class SiamEmbedder:
         else:
             print(f"[siamfc] no finetuned weights at {path} — using ImageNet pretrained")
 
-        print(f"[siamfc] ResNet50 encoder ready on {DEVICE}, dim={self.EMBED_DIM}, amp={self._amp}")
+        print(f"[siamfc] ConvNeXt-Small encoder ready on {DEVICE}, dim={self.EMBED_DIM}, amp={self._amp}")
 
     @torch.no_grad()
     def embed(self, crops_bgr: list[np.ndarray]) -> np.ndarray:
