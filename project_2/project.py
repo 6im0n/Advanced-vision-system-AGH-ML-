@@ -31,18 +31,28 @@ def _open_writer(info, suffix: str):
     return viz.VideoWriter(out, info["frame_rate"], (info["im_width"], info["im_height"]))
 
 
-def run_track(seq_dir: Path, save_video: bool):
+def _build_tracker(name: str, embedder, frame_rate: int):
+    if name == "botsort":
+        from src.tracker_botsort import MOTTracker
+        return MOTTracker(embedder, frame_rate=frame_rate)
+    if name == "legacy":
+        from src.tracker_legacy import MOTTracker
+        return MOTTracker(embedder)
+    raise ValueError(f"unknown tracker: {name}")
+
+
+def run_track(seq_dir: Path, save_video: bool, tracker_name: str = "botsort"):
     """Full tracker run: detector → tracker → write MOT txt + video."""
     from src.detector import FasterRCNNDetector
     from src.siamfc import SiamEmbedder
-    from src.tracker import MOTTracker
 
     info = load_seqinfo(seq_dir)
-    print(f"[track] {info['name']}: {info['seq_length']} frames @ {info['frame_rate']} fps")
+    print(f"[track] {info['name']}: {info['seq_length']} frames @ {info['frame_rate']} fps "
+          f"(tracker={tracker_name})")
 
     detector = FasterRCNNDetector()
     embedder = SiamEmbedder()
-    tracker = MOTTracker(embedder)
+    tracker = _build_tracker(tracker_name, embedder, frame_rate=int(info["frame_rate"]))
 
     rows = []
     writer = _open_writer(info, "track") if save_video else None
@@ -153,6 +163,8 @@ def main():
     ap.add_argument("--split", default="train", choices=["train", "test", "all"],
                     help="resolves --seq=all to this split (ignored for explicit names)")
     ap.add_argument("--mode", default="track", choices=["track", "gt", "det"])
+    ap.add_argument("--tracker", default="botsort", choices=["botsort", "legacy"],
+                    help="association backend (default: botsort)")
     ap.add_argument("--no-video", action="store_true")
     ap.add_argument("--eval", action="store_true",
                     help="run TrackEval after tracking (only valid for train split)")
@@ -162,7 +174,7 @@ def main():
 
     for sd in seq_dirs:
         if args.mode == "track":
-            run_track(sd, save_video=not args.no_video)
+            run_track(sd, save_video=not args.no_video, tracker_name=args.tracker)
         elif args.mode == "gt":
             if not (sd / "gt" / "gt.txt").exists():
                 print(f"[skip] {sd.name}: no GT (test split)")

@@ -52,12 +52,12 @@ class TrackerCfg:
     context_amount: float = 0.1      # less padding for tall person crops
     siam_weights: str = str(WEIGHTS_DIR / "siamfc_alexnet_e50.pth")
 
-    # Track lifecycle
+    # Track lifecycle (legacy tracker)
     n_init: int = 3
     max_age: int = 30                # frames a confirmed track stays "active" while unmatched
     lost_max_age: int = 60           # frames a "lost" track waits for resurrection
 
-    # Association weights (single-pass Hungarian)
+    # Association weights (legacy single-pass Hungarian)
     w_iou: float = 0.3
     w_app: float = 0.7
     iou_gate: float = 0.05
@@ -72,5 +72,34 @@ class TrackerCfg:
     trail_len: int = 30
 
 
+@dataclass
+class BotSortCfg:
+    # Detection score gates (BoT-SORT two-stage)
+    track_high_thresh: float = 0.6
+    track_low_thresh: float = 0.1
+    new_track_thresh: float = 0.7
+
+    # Lifecycle
+    track_buffer: int = 90           # frames a lost track is kept (was 180)
+
+    # Association
+    match_thresh: float = 0.8        # 1st-stage IoU/embed cost gate
+    proximity_thresh: float = 0.5    # IoU gate above which appearance is ignored
+    appearance_thresh: float = 0.25  # cosine-distance accept gate for ReID match
+
+    # ReID + CMC
+    with_reid: bool = True
+    cmc_method: str = "ecc"          # ecc | orb | sparseOptFlow | none
+    gmc_downscale: int = 4           # downscale factor for ECC speed
+
+    # Misc BoT-SORT flags
+    mot20: bool = False              # disables fuse_score, used for crowded scenes
+    fuse_score: bool = True          # fuse detection score into IoU cost
+    name: str = "evs_mot"
+    ablation: bool = False
+    device: str = "cuda"
+
+
 CFG = TrackerCfg()
+BOTSORT_CFG = BotSortCfg()
 DEVICE = pick_device()

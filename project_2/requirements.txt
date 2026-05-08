@@ -11,3 +11,5 @@ gdown
 trackeval
 tqdm
 filterpy
+lap
+cython_bbox
