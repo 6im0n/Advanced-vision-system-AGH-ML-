@@ -26,7 +26,7 @@ LOW_LIGHT_MEAN_TH = 70.0
 class YoloDetector:
     """Pedestrian-only detector. Output rows: [x, y, w, h, score, mot_cls=1]."""
 
-    def __init__(self, weights_path: str | None = None, imgsz: int = 1280,
+    def __init__(self, weights_path: str | None = None, imgsz: int = 1920,
                  score_th: float | None = None, iou: float | None = None,
                  clahe: str = "on"):
         from ultralytics import YOLO
