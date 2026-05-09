@@ -42,7 +42,8 @@ def _build_tracker(name: str, embedder, frame_rate: int,
     raise ValueError(f"unknown tracker: {name}")
 
 
-def _build_detector(name: str, overrides: dict | None = None):
+def _build_detector(name: str, overrides: dict | None = None,
+                    seq_dir: Path | None = None):
     kw = overrides or {}
     if name == "yolo":
         from src.detector_yolo import YoloDetector
@@ -50,6 +51,11 @@ def _build_detector(name: str, overrides: dict | None = None):
     if name == "frcnn":
         from src.detector import FasterRCNNDetector
         return FasterRCNNDetector()
+    if name == "dettxt":
+        from src.detector_dettxt import DetTxtDetector
+        if seq_dir is None:
+            raise ValueError("dettxt detector requires seq_dir")
+        return DetTxtDetector(seq_dir, **kw)
     raise ValueError(f"unknown detector: {name}")
 
 
@@ -66,7 +72,7 @@ def run_track(seq_dir: Path, save_video: bool, tracker_name: str = "botsort",
     print(f"[track] {info['name']}: {info['seq_length']} frames @ {info['frame_rate']} fps "
           f"(detector={detector_name}, tracker={tracker_name})")
 
-    detector = _build_detector(detector_name, seq_ov.get("detector"))
+    detector = _build_detector(detector_name, seq_ov.get("detector"), seq_dir=seq_dir)
     embedder = SiamEmbedder()
     tracker = _build_tracker(tracker_name, embedder, frame_rate=int(info["frame_rate"]),
                              overrides=seq_ov.get("botsort"))
@@ -207,8 +213,8 @@ def main():
     ap.add_argument("--mode", default="track", choices=["track", "gt", "det"])
     ap.add_argument("--tracker", default="botsort", choices=["botsort", "legacy"],
                     help="association backend (default: botsort)")
-    ap.add_argument("--detector", default="frcnn", choices=["frcnn", "yolo"],
-                    help="detector backend (default: frcnn)")
+    ap.add_argument("--detector", default="dettxt", choices=["frcnn", "yolo", "dettxt"],
+                    help="detector backend (default: dettxt — uses provided det.txt per challenge rules)")
     ap.add_argument("--no-video", action="store_true")
     ap.add_argument("--profile", action="store_true",
                     help="print per-stage timing breakdown")
