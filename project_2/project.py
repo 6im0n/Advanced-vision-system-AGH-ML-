@@ -56,6 +56,11 @@ def _build_detector(name: str, overrides: dict | None = None,
         if seq_dir is None:
             raise ValueError("dettxt detector requires seq_dir")
         return DetTxtDetector(seq_dir, **kw)
+    if name == "ensemble":
+        from src.detector_ensemble import EnsembleDetector
+        if seq_dir is None:
+            raise ValueError("ensemble detector requires seq_dir")
+        return EnsembleDetector(seq_dir, **kw)
     raise ValueError(f"unknown detector: {name}")
 
 
@@ -213,8 +218,10 @@ def main():
     ap.add_argument("--mode", default="track", choices=["track", "gt", "det"])
     ap.add_argument("--tracker", default="botsort", choices=["botsort", "legacy"],
                     help="association backend (default: botsort)")
-    ap.add_argument("--detector", default="dettxt", choices=["frcnn", "yolo", "dettxt"],
-                    help="detector backend (default: dettxt — uses provided det.txt per challenge rules)")
+    ap.add_argument("--detector", default="dettxt",
+                    choices=["frcnn", "yolo", "dettxt", "ensemble"],
+                    help="detector backend (default: dettxt — uses provided det.txt per challenge rules; "
+                         "ensemble = det.txt ∪ YOLO with NMS)")
     ap.add_argument("--no-video", action="store_true")
     ap.add_argument("--profile", action="store_true",
                     help="print per-stage timing breakdown")
