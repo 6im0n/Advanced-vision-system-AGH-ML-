@@ -43,7 +43,7 @@ MOT_CLASS_NAMES = {1: "ped", 2: "ped-veh", 3: "car", 4: "bike", 5: "moto", 6: "v
 @dataclass
 class TrackerCfg:
     # Detector
-    det_score_th: float = 0.6
+    det_score_th: float = 0.25
     det_nms_iou: float = 0.4
 
     # Appearance encoder

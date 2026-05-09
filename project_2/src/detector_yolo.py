@@ -28,7 +28,7 @@ class YoloDetector:
 
     def __init__(self, weights_path: str | None = None, imgsz: int = 1280,
                  score_th: float | None = None, iou: float | None = None,
-                 clahe: str = "auto"):
+                 clahe: str = "on"):
         from ultralytics import YOLO
 
         wp = Path(weights_path) if weights_path else YOLO_FT_WEIGHTS
@@ -74,6 +74,7 @@ class YoloDetector:
             device=self._device,
             verbose=False,
             half=True,
+            augment=True,
         )
         if not results:
             return np.zeros((0, 6), dtype=np.float32)
