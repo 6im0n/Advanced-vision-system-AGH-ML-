@@ -43,7 +43,7 @@ MOT_CLASS_NAMES = {1: "ped", 2: "ped-veh", 3: "car", 4: "bike", 5: "moto", 6: "v
 @dataclass
 class TrackerCfg:
     # Detector
-    det_score_th: float = 0.6
+    det_score_th: float = 0.3
     det_nms_iou: float = 0.4
 
     # Appearance encoder
@@ -75,17 +75,17 @@ class TrackerCfg:
 @dataclass
 class BotSortCfg:
     # Detection score gates (BoT-SORT two-stage)
-    track_high_thresh: float = 0.6
-    track_low_thresh: float = 0.1
-    new_track_thresh: float = 0.7
+    track_high_thresh: float = 0.4
+    track_low_thresh: float = 0.05
+    new_track_thresh: float = 0.6
 
     # Lifecycle
-    track_buffer: int = 90           # frames a lost track is kept (was 180)
+    track_buffer: int = 150          # frames a lost track is kept (5s @ 30fps)
 
     # Association
-    match_thresh: float = 0.8        # 1st-stage IoU/embed cost gate
-    proximity_thresh: float = 0.5    # IoU gate above which appearance is ignored
-    appearance_thresh: float = 0.25  # cosine-distance accept gate for ReID match
+    match_thresh: float = 0.85       # 1st-stage IoU/embed cost gate
+    proximity_thresh: float = 0.6    # IoU gate above which appearance is ignored
+    appearance_thresh: float = 0.35  # cosine-distance accept gate for ReID match
 
     # ReID + CMC
     with_reid: bool = True
