@@ -52,11 +52,11 @@ def train(model: str, epochs: int, imgsz: int, batch: int, device: str,
         # Geometric transforms — different camera angles in test sequences.
         degrees=15.0,               # rotation ±15°
         translate=0.15,             # shift ±15%
-        scale=0.6,                  # zoom 0.4×–1.6×
+        scale=0.65,                  # zoom 0.4×–1.6×
         shear=4.0,                  # shear ±4°
         perspective=0.0008,         # mild perspective warp
         fliplr=0.5,                 # horizontal flip
-        flipud=0.001,               # never vertical (people don't fly upside-down)
+        flipud=0.0,               # never vertical (people don't fly upside-down)
 
         # Mix-style / occlusion aug — boost generalization on small dataset.
         mosaic=1.0,                 # always-on mosaic = 4× context per training sample
