@@ -40,15 +40,34 @@ def train(model: str, epochs: int, imgsz: int, batch: int, device: str,
         name=name,
         cos_lr=True,
         amp=True,
-        # Heavy brightness/contrast aug — test set contains dim/low-light sequences
-        # not represented in MOT_02-05 train splits. Boost hsv_v + exposure jitter.
-        mosaic=0.5,
-        mixup=0.0,
-        close_mosaic=10,
-        hsv_h=0.015, hsv_s=0.5, hsv_v=0.7,
-        translate=0.05, scale=0.4, fliplr=0.5,
         single_cls=True,
         verbose=True,
+
+        # Color / light variation — test sequences include low-light, different
+        # camera response, different scene. Push HSV hard.
+        hsv_h=0.1,                  # hue jitter (small — keep skin/clothing tone)
+        hsv_s=0.9,                  # saturation: full range, simulates desaturated/dim
+        hsv_v=0.9,                  # value (brightness): max → covers dark + bright
+
+        # Geometric transforms — different camera angles in test sequences.
+        degrees=15.0,               # rotation ±15°
+        translate=0.15,             # shift ±15%
+        scale=0.6,                  # zoom 0.4×–1.6×
+        shear=4.0,                  # shear ±4°
+        perspective=0.0008,         # mild perspective warp
+        fliplr=0.5,                 # horizontal flip
+        flipud=0.001,               # never vertical (people don't fly upside-down)
+
+        # Mix-style / occlusion aug — boost generalization on small dataset.
+        mosaic=1.0,                 # always-on mosaic = 4× context per training sample
+        mixup=0.2,                  # blend two images → robustness
+        copy_paste=0.4,             # paste GT instances elsewhere → crowd density
+        close_mosaic=15,            # disable mosaic last 15 epochs for clean finetune
+        erasing=0.4,                # random erasing → simulate occlusion
+
+        # Inference-time aug during val (multi-scale recall).
+        augment=False,              # leave train-time off; turn on at predict
+        bgr=0.0,
     )
     save_dir = Path(results.save_dir) if hasattr(results, "save_dir") else Path(yolo.trainer.save_dir)
     best = save_dir / "weights" / "best.pt"
