@@ -43,8 +43,8 @@ MOT_CLASS_NAMES = {1: "ped", 2: "ped-veh", 3: "car", 4: "bike", 5: "moto", 6: "v
 @dataclass
 class TrackerCfg:
     # Detector
-    det_score_th: float = 0.15
-    det_nms_iou: float = 0.4
+    det_score_th: float = 0.05
+    det_nms_iou: float = 0.2
 
     # Appearance encoder
     crop_h: int = 256                # person ReID standard
@@ -69,15 +69,15 @@ class TrackerCfg:
 
     # Visualization
     draw_trajectory: bool = True
-    trail_len: int = 30
+    trail_len: int = 60
 
 
 @dataclass
 class BotSortCfg:
     # Detection score gates (BoT-SORT two-stage)
-    track_high_thresh: float = 0.6
-    track_low_thresh: float = 0.1
-    new_track_thresh: float = 0.7
+    track_high_thresh: float = 0.3
+    track_low_thresh: float = 0.05
+    new_track_thresh: float = 0.35
 
     # Lifecycle
     track_buffer: int = 90           # frames a lost track is kept
