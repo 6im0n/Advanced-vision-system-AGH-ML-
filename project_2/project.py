@@ -41,18 +41,27 @@ def _build_tracker(name: str, embedder, frame_rate: int):
     raise ValueError(f"unknown tracker: {name}")
 
 
+def _build_detector(name: str):
+    if name == "yolo":
+        from src.detector_yolo import YoloDetector
+        return YoloDetector()
+    if name == "frcnn":
+        from src.detector import FasterRCNNDetector
+        return FasterRCNNDetector()
+    raise ValueError(f"unknown detector: {name}")
+
+
 def run_track(seq_dir: Path, save_video: bool, tracker_name: str = "botsort",
-              profile: bool = False):
+              detector_name: str = "frcnn", profile: bool = False):
     """Full tracker run: detector → tracker → write MOT txt + video."""
     import time
-    from src.detector import FasterRCNNDetector
     from src.siamfc import SiamEmbedder
 
     info = load_seqinfo(seq_dir)
     print(f"[track] {info['name']}: {info['seq_length']} frames @ {info['frame_rate']} fps "
-          f"(tracker={tracker_name})")
+          f"(detector={detector_name}, tracker={tracker_name})")
 
-    detector = FasterRCNNDetector()
+    detector = _build_detector(detector_name)
     embedder = SiamEmbedder()
     tracker = _build_tracker(tracker_name, embedder, frame_rate=int(info["frame_rate"]))
 
@@ -192,6 +201,8 @@ def main():
     ap.add_argument("--mode", default="track", choices=["track", "gt", "det"])
     ap.add_argument("--tracker", default="botsort", choices=["botsort", "legacy"],
                     help="association backend (default: botsort)")
+    ap.add_argument("--detector", default="frcnn", choices=["frcnn", "yolo"],
+                    help="detector backend (default: frcnn)")
     ap.add_argument("--no-video", action="store_true")
     ap.add_argument("--profile", action="store_true",
                     help="print per-stage timing breakdown")
@@ -204,7 +215,8 @@ def main():
     for sd in seq_dirs:
         if args.mode == "track":
             run_track(sd, save_video=not args.no_video,
-                      tracker_name=args.tracker, profile=args.profile)
+                      tracker_name=args.tracker, detector_name=args.detector,
+                      profile=args.profile)
         elif args.mode == "gt":
             if not (sd / "gt" / "gt.txt").exists():
                 print(f"[skip] {sd.name}: no GT (test split)")

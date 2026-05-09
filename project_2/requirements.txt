@@ -12,3 +12,5 @@ trackeval
 tqdm
 filterpy
 lap
+ultralytics
+pyyaml
