@@ -40,12 +40,13 @@ def train(model: str, epochs: int, imgsz: int, batch: int, device: str,
         name=name,
         cos_lr=True,
         amp=True,
-        # Slightly more conservative aug for MOT-style data (heavy crowds, small boxes).
+        # Heavy brightness/contrast aug — test set contains dim/low-light sequences
+        # not represented in MOT_02-05 train splits. Boost hsv_v + exposure jitter.
         mosaic=0.5,
         mixup=0.0,
         close_mosaic=10,
-        hsv_h=0.015, hsv_s=0.4, hsv_v=0.3,
-        translate=0.05, scale=0.3, fliplr=0.5,
+        hsv_h=0.015, hsv_s=0.5, hsv_v=0.7,
+        translate=0.05, scale=0.4, fliplr=0.5,
         single_cls=True,
         verbose=True,
     )

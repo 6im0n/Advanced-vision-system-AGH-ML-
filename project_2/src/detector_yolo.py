@@ -3,9 +3,13 @@ as FasterRCNNDetector so the tracker pipeline is detector-agnostic.
 
 Loads finetuned weights from weights/yolov8_mot.pt by default. If absent,
 falls back to ultralytics yolov8m.pt (COCO-pretrained, person class only).
+
+Optional CLAHE preprocessing boosts contrast on dim frames (test set
+contains low-light sequences with poor pedestrian visibility).
 """
 from __future__ import annotations
 from pathlib import Path
+import cv2
 import numpy as np
 
 from .config import CFG, DEVICE, WEIGHTS_DIR
@@ -15,12 +19,16 @@ YOLO_FT_WEIGHTS = WEIGHTS_DIR / "yolov8_mot.pt"
 YOLO_FALLBACK = "yolov8m.pt"
 COCO_PERSON_CLS = 0   # COCO class id for "person" in pretrained YOLOv8
 
+# Frame mean below this triggers CLAHE preprocessing (auto-mode).
+LOW_LIGHT_MEAN_TH = 70.0
+
 
 class YoloDetector:
     """Pedestrian-only detector. Output rows: [x, y, w, h, score, mot_cls=1]."""
 
     def __init__(self, weights_path: str | None = None, imgsz: int = 1280,
-                 score_th: float | None = None, iou: float | None = None):
+                 score_th: float | None = None, iou: float | None = None,
+                 clahe: str = "auto"):
         from ultralytics import YOLO
 
         wp = Path(weights_path) if weights_path else YOLO_FT_WEIGHTS
@@ -38,7 +46,25 @@ class YoloDetector:
         self.iou = CFG.det_nms_iou if iou is None else iou
         self._device = "cuda" if DEVICE.type == "cuda" else "cpu"
 
+        # clahe: "off" | "on" | "auto" (apply when frame mean < LOW_LIGHT_MEAN_TH)
+        if clahe not in ("off", "on", "auto"):
+            raise ValueError(f"clahe must be off/on/auto, got {clahe}")
+        self._clahe_mode = clahe
+        self._clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
+
+    def _maybe_clahe(self, frame_bgr: np.ndarray) -> np.ndarray:
+        if self._clahe_mode == "off":
+            return frame_bgr
+        if self._clahe_mode == "auto":
+            if float(frame_bgr.mean()) >= LOW_LIGHT_MEAN_TH:
+                return frame_bgr
+        # CLAHE on the L channel of LAB preserves color while boosting contrast.
+        lab = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2LAB)
+        lab[:, :, 0] = self._clahe.apply(lab[:, :, 0])
+        return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+
     def detect(self, frame_bgr: np.ndarray) -> np.ndarray:
+        frame_bgr = self._maybe_clahe(frame_bgr)
         """Frame BGR → ndarray[N, 6]: x, y, w, h, score, mot_cls."""
         results = self.model.predict(
             source=frame_bgr,
