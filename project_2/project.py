@@ -19,7 +19,7 @@ import argparse
 from pathlib import Path
 from tqdm import tqdm
 
-from src.config import CFG, TRAIN_DIR, TEST_DIR, RESULTS_DIR
+from src.config import CFG, TRAIN_DIR, TEST_DIR, RESULTS_DIR, PER_SEQ_OVERRIDES
 from src.io_mot import (
     load_seqinfo, frame_iter, write_mot_results, parse_mot_csv, filter_frame,
 )
@@ -31,20 +31,22 @@ def _open_writer(info, suffix: str):
     return viz.VideoWriter(out, info["frame_rate"], (info["im_width"], info["im_height"]))
 
 
-def _build_tracker(name: str, embedder, frame_rate: int):
+def _build_tracker(name: str, embedder, frame_rate: int,
+                   overrides: dict | None = None):
     if name == "botsort":
         from src.tracker_botsort import MOTTracker
-        return MOTTracker(embedder, frame_rate=frame_rate)
+        return MOTTracker(embedder, frame_rate=frame_rate, overrides=overrides)
     if name == "legacy":
         from src.tracker_legacy import MOTTracker
         return MOTTracker(embedder)
     raise ValueError(f"unknown tracker: {name}")
 
 
-def _build_detector(name: str):
+def _build_detector(name: str, overrides: dict | None = None):
+    kw = overrides or {}
     if name == "yolo":
         from src.detector_yolo import YoloDetector
-        return YoloDetector()
+        return YoloDetector(**kw)
     if name == "frcnn":
         from src.detector import FasterRCNNDetector
         return FasterRCNNDetector()
@@ -58,12 +60,16 @@ def run_track(seq_dir: Path, save_video: bool, tracker_name: str = "botsort",
     from src.siamfc import SiamEmbedder
 
     info = load_seqinfo(seq_dir)
+    seq_ov = PER_SEQ_OVERRIDES.get(info["name"], {})
+    if seq_ov:
+        print(f"[track] {info['name']}: applying per-seq overrides {seq_ov}")
     print(f"[track] {info['name']}: {info['seq_length']} frames @ {info['frame_rate']} fps "
           f"(detector={detector_name}, tracker={tracker_name})")
 
-    detector = _build_detector(detector_name)
+    detector = _build_detector(detector_name, seq_ov.get("detector"))
     embedder = SiamEmbedder()
-    tracker = _build_tracker(tracker_name, embedder, frame_rate=int(info["frame_rate"]))
+    tracker = _build_tracker(tracker_name, embedder, frame_rate=int(info["frame_rate"]),
+                             overrides=seq_ov.get("botsort"))
 
     rows = []
     writer = _open_writer(info, "track") if save_video else None

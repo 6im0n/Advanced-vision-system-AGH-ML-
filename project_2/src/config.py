@@ -100,6 +100,18 @@ class BotSortCfg:
     device: str = "cuda"
 
 
+# Per-sequence overrides for detector + tracker hyperparams.
+# Applied in project.run_track based on seqinfo name. Keys map to attr
+# names of either TrackerCfg / BotSortCfg or detector kwargs (imgsz).
+# MOT_07: small pedestrians (median 78px tall) — boost imgsz, lower score gates.
+PER_SEQ_OVERRIDES: dict[str, dict] = {
+    "MOT_07": {
+        "detector": {"imgsz": 2560, "score_th": 0.05},
+        "botsort": {"track_low_thresh": 0.05, "new_track_thresh": 0.5},
+    },
+}
+
+
 CFG = TrackerCfg()
 BOTSORT_CFG = BotSortCfg()
 DEVICE = pick_device()

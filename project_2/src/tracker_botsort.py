@@ -194,25 +194,30 @@ class MOTTracker:
 
     PEDESTRIAN_CLS = 1
 
-    def __init__(self, embedder: SiamEmbedder, frame_rate: int = 30):
+    def __init__(self, embedder: SiamEmbedder, frame_rate: int = 30,
+                 overrides: dict | None = None):
         self.embedder = embedder
         cfg = BOTSORT_CFG
+        def _g(k):
+            if overrides and k in overrides:
+                return overrides[k]
+            return getattr(cfg, k)
         args = _ArgsBundle(
-            track_high_thresh=cfg.track_high_thresh,
-            track_low_thresh=cfg.track_low_thresh,
-            new_track_thresh=cfg.new_track_thresh,
-            track_buffer=cfg.track_buffer,
-            match_thresh=cfg.match_thresh,
-            proximity_thresh=cfg.proximity_thresh,
-            appearance_thresh=cfg.appearance_thresh,
-            with_reid=cfg.with_reid,
-            cmc_method=cfg.cmc_method,
-            gmc_downscale=cfg.gmc_downscale,
-            mot20=cfg.mot20,
-            fuse_score=cfg.fuse_score,
-            name=cfg.name,
-            ablation=cfg.ablation,
-            device=cfg.device,
+            track_high_thresh=_g("track_high_thresh"),
+            track_low_thresh=_g("track_low_thresh"),
+            new_track_thresh=_g("new_track_thresh"),
+            track_buffer=_g("track_buffer"),
+            match_thresh=_g("match_thresh"),
+            proximity_thresh=_g("proximity_thresh"),
+            appearance_thresh=_g("appearance_thresh"),
+            with_reid=_g("with_reid"),
+            cmc_method=_g("cmc_method"),
+            gmc_downscale=_g("gmc_downscale"),
+            mot20=_g("mot20"),
+            fuse_score=_g("fuse_score"),
+            name=_g("name"),
+            ablation=_g("ablation"),
+            device=_g("device"),
         )
         encoder = _SiamEncoder(embedder) if cfg.with_reid else None
         self._inner = _BoTSORTNoFastReID(args, frame_rate=frame_rate, encoder=encoder)
