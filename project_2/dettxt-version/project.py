@@ -1,0 +1,226 @@
+"""dettxt MOT pipeline — provided det.txt input + ConvNeXt-S ReID + BoT-SORT.
+
+Per challenge rules, sequence det.txt is the canonical detector input. This
+version of the project drops own detectors (YOLO, Faster R-CNN, ensemble) and
+the legacy tracker; only BoT-SORT + dettxt remain.
+
+Examples
+--------
+# Run on one training sequence and save video:
+    python project.py --seq MOT_02
+
+# Run all training sequences then evaluate with TrackEval:
+    python project.py --seq all --eval
+
+# Visualize ground truth only:
+    python project.py --seq MOT_02 --mode gt
+
+# Visualize raw det.txt detections (no tracker, no IDs):
+    python project.py --seq MOT_02 --mode det
+"""
+from __future__ import annotations
+import argparse
+from pathlib import Path
+from tqdm import tqdm
+
+from src.config import CFG, TRAIN_DIR, TEST_DIR, RESULTS_DIR, PER_SEQ_OVERRIDES
+from src.io_mot import (
+    load_seqinfo, frame_iter, write_mot_results, parse_mot_csv, filter_frame,
+)
+from src import visualize as viz
+
+
+def _open_writer(info, suffix: str):
+    out = RESULTS_DIR / f"{info['name']}_{suffix}.mp4"
+    return viz.VideoWriter(out, info["frame_rate"], (info["im_width"], info["im_height"]))
+
+
+def _build_tracker(embedder, frame_rate: int, overrides: dict | None = None):
+    from src.tracker_botsort import MOTTracker
+    return MOTTracker(embedder, frame_rate=frame_rate, overrides=overrides)
+
+
+def _build_detector(seq_dir: Path, overrides: dict | None = None):
+    from src.detector_dettxt import DetTxtDetector
+    return DetTxtDetector(seq_dir, **(overrides or {}))
+
+
+def run_track(seq_dir: Path, save_video: bool, profile: bool = False):
+    """Full tracker run: dettxt → BoT-SORT → write MOT txt + video."""
+    import time
+    from src.siamfc import SiamEmbedder
+
+    info = load_seqinfo(seq_dir)
+    seq_ov = PER_SEQ_OVERRIDES.get(info["name"], {})
+    if seq_ov:
+        print(f"[track] {info['name']}: applying per-seq overrides {seq_ov}")
+    print(f"[track] {info['name']}: {info['seq_length']} frames @ {info['frame_rate']} fps "
+          f"(detector=dettxt, tracker=botsort)")
+
+    detector = _build_detector(seq_dir, seq_ov.get("detector"))
+    embedder = SiamEmbedder()
+    tracker = _build_tracker(embedder, frame_rate=int(info["frame_rate"]),
+                             overrides=seq_ov.get("botsort"))
+
+    rows = []
+    writer = _open_writer(info, "track") if save_video else None
+    timings = {"io": 0.0, "det": 0.0, "track": 0.0, "draw": 0.0, "total": 0.0}
+    n_frames = 0
+    try:
+        t_prev = time.perf_counter()
+        for fi, frame in tqdm(frame_iter(seq_dir), total=info["seq_length"]):
+            t_io = time.perf_counter()
+            dets = detector.detect(frame)
+            t_det = time.perf_counter()
+            active = tracker.update(frame, dets, fi)
+            t_trk = time.perf_counter()
+            for t in active:
+                if not t.emitted:
+                    for f_buf, bb in t.bbox_history:
+                        rows.append((f_buf, t.track_id,
+                                     float(bb[0]), float(bb[1]),
+                                     float(bb[2]), float(bb[3]), 1.0, t.cls_id))
+                    t.emitted = True
+                    t.bbox_history.clear()
+                else:
+                    x, y, w, h = t.bbox
+                    rows.append((fi, t.track_id, x, y, w, h, 1.0, t.cls_id))
+            if writer is not None:
+                drawable = [t for t in active if t.age == 0]
+                writer.write(viz.draw_tracks(frame, drawable, CFG.draw_trajectory))
+            t_end = time.perf_counter()
+            timings["io"] += t_io - t_prev
+            timings["det"] += t_det - t_io
+            timings["track"] += t_trk - t_det
+            timings["draw"] += t_end - t_trk
+            timings["total"] += t_end - t_prev
+            n_frames += 1
+            t_prev = time.perf_counter()
+    finally:
+        if writer is not None:
+            writer.close()
+
+    if profile and n_frames > 0:
+        print(f"[profile] avg ms/frame over {n_frames} frames "
+              f"(total {timings['total']*1000/n_frames:.1f}ms = "
+              f"{n_frames/timings['total']:.1f} fps):")
+        for k in ("io", "det", "track", "draw"):
+            ms = timings[k] * 1000 / n_frames
+            pct = 100 * timings[k] / timings["total"]
+            print(f"  {k:>6}: {ms:6.1f} ms  ({pct:4.1f}%)")
+        enc = getattr(getattr(tracker, "_inner", None), "encoder", None)
+        if enc is not None and hasattr(enc, "t_embed"):
+            print(f"  [reid] crop:  {enc.t_crop*1000/n_frames:6.1f} ms  "
+                  f"embed: {enc.t_embed*1000/n_frames:6.1f} ms")
+
+    out_txt = RESULTS_DIR / f"{info['name']}.txt"
+    write_mot_results(out_txt, rows)
+    print(f"[track] wrote {len(rows)} rows -> {out_txt}")
+    return out_txt
+
+
+def run_visualize_gt(seq_dir: Path):
+    info = load_seqinfo(seq_dir)
+    gt = parse_mot_csv(seq_dir / "gt" / "gt.txt")
+    writer = _open_writer(info, "gt")
+    try:
+        for fi, frame in tqdm(frame_iter(seq_dir), total=info["seq_length"]):
+            rows = filter_frame(gt, fi)
+            tracks_like = []
+            for r in rows:
+                tid = int(r[1])
+                bbox = r[2:6]
+                tracks_like.append(_FakeTrack(tid, bbox))
+            writer.write(viz.draw_tracks(frame, tracks_like, draw_trail=False))
+    finally:
+        writer.close()
+    print(f"[gt] wrote {RESULTS_DIR / f'{info['name']}_gt.mp4'}")
+
+
+def run_visualize_det(seq_dir: Path):
+    """Render det.txt detections (no tracker)."""
+    from src.detector_dettxt import DetTxtDetector
+
+    info = load_seqinfo(seq_dir)
+    detector = DetTxtDetector(seq_dir)
+    writer = _open_writer(info, "det")
+    try:
+        for fi, frame in tqdm(frame_iter(seq_dir), total=info["seq_length"]):
+            dets = detector.detect(frame)
+            writer.write(viz.draw_boxes(frame, dets[:, :4], (0, 255, 0), "det"))
+    finally:
+        writer.close()
+    print(f"[det] wrote {RESULTS_DIR / f'{info['name']}_det.mp4'}")
+
+
+class _FakeTrack:
+    def __init__(self, tid, bbox):
+        self.track_id = tid
+        self.bbox = bbox
+        self.history = []
+
+
+def _resolve_seqs(spec: str, split: str) -> list[Path]:
+    if split == "train":
+        root = TRAIN_DIR
+    elif split == "test":
+        root = TEST_DIR
+    elif split == "all":
+        return sorted(TRAIN_DIR.glob("MOT_*")) + sorted(TEST_DIR.glob("MOT_*"))
+    else:
+        raise ValueError(f"unknown split={split}")
+
+    if spec == "all":
+        return sorted(root.glob("MOT_*"))
+    names = spec.split(",")
+    out = []
+    for n in names:
+        for r in (TRAIN_DIR, TEST_DIR):
+            cand = r / n
+            if cand.exists():
+                out.append(cand)
+                break
+        else:
+            raise FileNotFoundError(n)
+    return out
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--seq", default="MOT_02",
+                    help="sequence name(s), comma-separated, or 'all'")
+    ap.add_argument("--split", default="train", choices=["train", "test", "all"])
+    ap.add_argument("--mode", default="track", choices=["track", "gt", "det"])
+    ap.add_argument("--no-video", action="store_true")
+    ap.add_argument("--profile", action="store_true",
+                    help="print per-stage timing breakdown")
+    ap.add_argument("--eval", action="store_true",
+                    help="run TrackEval after tracking (only valid for train split)")
+    args = ap.parse_args()
+
+    seq_dirs = _resolve_seqs(args.seq, args.split)
+
+    for sd in seq_dirs:
+        if args.mode == "track":
+            run_track(sd, save_video=not args.no_video, profile=args.profile)
+        elif args.mode == "gt":
+            if not (sd / "gt" / "gt.txt").exists():
+                print(f"[skip] {sd.name}: no GT (test split)")
+                continue
+            run_visualize_gt(sd)
+        elif args.mode == "det":
+            run_visualize_det(sd)
+
+    if args.eval and args.mode == "track":
+        from src import eval_mota
+        seqs_with_gt = [sd for sd in seq_dirs if (sd / "gt" / "gt.txt").exists()]
+        if not seqs_with_gt:
+            print("[eval] no sequences with GT — skipping (test set has no GT)")
+            return
+        gt_root, tr_root = eval_mota.prepare_dirs(seqs_with_gt)
+        eval_mota.copy_results(tr_root)
+        eval_mota.run_eval()
+
+
+if __name__ == "__main__":
+    main()
