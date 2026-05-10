@@ -59,22 +59,45 @@ def _nms_xywh(dets: np.ndarray, iou_th: float) -> np.ndarray:
 
 
 class EnsembleDetector:
-    """det.txt ∪ YOLO → NMS."""
+    """det.txt ∪ YOLO. Two modes:
 
-    def __init__(self, seq_dir: Path, nms_iou: float = 0.5,
+    - mode="complement" (default): YOLO box added ONLY if max IoU with any
+      det.txt box < `overlap_iou`. Pure gap-filling, no FP from YOLO that
+      duplicates det.txt. Safest.
+    - mode="nms": concat both then class-agnostic NMS at `nms_iou`. Looser,
+      may pass through YOLO duplicates if they don't overlap.
+    """
+
+    def __init__(self, seq_dir: Path,
+                 mode: str = "complement",
+                 overlap_iou: float = 0.3,
+                 nms_iou: float = 0.5,
                  dettxt_score_th: float | None = None,
+                 yolo_score_th: float = 0.5,
                  yolo_kwargs: dict | None = None):
-        self.dettxt = DetTxtDetector(seq_dir, score_th=dettxt_score_th)
-        self.yolo = YoloDetector(**(yolo_kwargs or {}))
+        if mode not in ("complement", "nms"):
+            raise ValueError(f"mode must be complement|nms, got {mode}")
+        self.mode = mode
+        self.overlap_iou = overlap_iou
         self.nms_iou = nms_iou
+        self.dettxt = DetTxtDetector(seq_dir, score_th=dettxt_score_th)
+        kw = dict(yolo_kwargs or {})
+        kw.setdefault("score_th", yolo_score_th)
+        self.yolo = YoloDetector(**kw)
 
     def detect(self, frame_bgr: np.ndarray) -> np.ndarray:
         a = self.dettxt.detect(frame_bgr)
         b = self.yolo.detect(frame_bgr)
+        if b.size == 0:
+            return a
         if a.size == 0:
-            merged = b
-        elif b.size == 0:
-            merged = a
-        else:
-            merged = np.concatenate([a, b], axis=0)
+            return b
+        if self.mode == "complement":
+            ious = _iou_xywh(b[:, :4], a[:, :4])
+            max_iou = ious.max(axis=1) if ious.size else np.zeros(len(b))
+            keep = max_iou < self.overlap_iou
+            extra = b[keep]
+            return np.concatenate([a, extra], axis=0) if len(extra) else a
+        # nms mode
+        merged = np.concatenate([a, b], axis=0)
         return _nms_xywh(merged, self.nms_iou)
