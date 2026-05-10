@@ -73,7 +73,7 @@ class EnsembleDetector:
                  overlap_iou: float = 0.3,
                  nms_iou: float = 0.5,
                  dettxt_score_th: float | None = None,
-                 yolo_score_th: float = 0.5,
+                 yolo_score_th: float = 0.8,
                  yolo_kwargs: dict | None = None):
         if mode not in ("complement", "nms"):
             raise ValueError(f"mode must be complement|nms, got {mode}")
