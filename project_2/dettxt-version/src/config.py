@@ -19,7 +19,19 @@ def use_amp(device: torch.device) -> bool:
 
 
 ROOT = Path(__file__).resolve().parent.parent
-DATA_DIR = ROOT / "evs_mot_public_dataset"
+
+
+def _resolve_dataset_dir() -> Path:
+    """Locate evs_mot_public_dataset. Check parent (shared across versions,
+    Windows-friendly — no symlink needed) then local fallback."""
+    for cand in (ROOT.parent / "evs_mot_public_dataset",
+                 ROOT / "evs_mot_public_dataset"):
+        if cand.is_dir():
+            return cand
+    return ROOT.parent / "evs_mot_public_dataset"
+
+
+DATA_DIR = _resolve_dataset_dir()
 TRAIN_DIR = DATA_DIR / "evs_mot-train"
 TEST_DIR = DATA_DIR / "evs_mot-test"
 WEIGHTS_DIR = ROOT / "weights"
