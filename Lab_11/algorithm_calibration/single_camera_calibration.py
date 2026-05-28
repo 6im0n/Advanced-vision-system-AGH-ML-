@@ -25,13 +25,17 @@ img_width = 640
 img_height = 480
 image_size = (img_width,img_height)
 
-path = ""
+path = "./dataset/"
 image_dir = path + "pairs/"
+
+img_to_show = cv2.imread(image_dir + "left_09.png")
 
 number_of_images = 50
 for i in range(1, number_of_images):
     # read image
-    img = cv2.imread(image_dir + "left_%02d.png" % i)
+    img_name = "left_%02d.png" % i
+    print(f"Processing: {img_name}")
+    img = cv2.imread(image_dir + img_name)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
     # Find the chess board corners
@@ -101,6 +105,28 @@ ret, K, D, _, _ = \
 # Let's rectify our results
 map1, map2 = cv2.fisheye.initUndistortRectifyMap(K, D, np.eye(3), K, image_size, cv2.CV_16SC2)
 
+# Determine the camera parameters and display them.
+"""
+Description of the parameters obtained during the calibration process:
+• ret – the value of the mean squared errors of the back projection (describes
+the quality of the matching),
+• K – matrix of internal camera parameters in the form:
+• D – distortion coefficients,
+• rvecs – rotation vectors,
+• tvecs – translation vectors (together with the rotation vectors allow to transform
+the position of the calibration standard from the model coordinates to the real coordinates
+"""
+print("Found " + str(N_OK) + " valid images for calibration")
+print("Ret (RMS Error) = ", ret)
+print("K (Intrinsic Matrix) = \n", K)
+print("D (Distortion Coefficients) = \n", D)
+print("rvecs (Rotation Vectors) = \n", rvecs)
+print("tvecs (Translation Vectors) = \n", tvecs)
 
+# Check the correction for one of the images in the set (straight line test).
+undistorted_image = cv2.remap(img_to_show, map1, map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
 
-undistorted_image = cv2.remap(img, map1, map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
+comparison = np.hstack((img_to_show, undistorted_image))
+cv2.imshow("Distorted vs Undistorted", comparison)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
