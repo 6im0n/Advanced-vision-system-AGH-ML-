@@ -126,7 +126,12 @@ print("tvecs (Translation Vectors) = \n", tvecs)
 # Check the correction for one of the images in the set (straight line test).
 undistorted_image = cv2.remap(img_to_show, map1, map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
 
-comparison = np.hstack((img_to_show, undistorted_image))
-cv2.imshow("Distorted vs Undistorted", comparison)
+combined = np.hstack((img_to_show, undistorted_image))
+
+# Draw horizontal lines: corresponding points should now lie on the same rows
+for y in range(0, combined.shape[0], 25):
+    cv2.line(combined, (0, y), (combined.shape[1], y), (0, 255, 0), 1)
+
+cv2.imshow("Distorted vs Undistorted", combined)
 cv2.waitKey(0)
 cv2.destroyAllWindows()
