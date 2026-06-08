@@ -72,8 +72,13 @@ def IoU(rect1, rect2):
 
 ############# METHOD ###############
 # Choose your fusion method
-#FUSION = "LATE"
-FUSION = "EARLY"
+FUSION = "LATE"
+#FUSION = "EARLY"
+
+# late is trained on thermal (_t suffix) and RGB (_c suffix) separately, more accurate
+# earlyu is trained on fused image _f, faster, but less accurate
+
+#Fusion early is faster than the late model, more robust
 
 ############# TODO0 ###############
 # Set the path
@@ -147,7 +152,30 @@ for i in range(200, 300):  # you can change the range up to 518
         # both lists with rectangles (we remember, that after calculating the average, the result should be converted
         #  to int, avg_r[0] = int((r1[0]/r2[0])/2) and so for all 4 elements. Finally we append "avg_r" to the "boxes" list.
         # This way the format of the "boxes" list will be the same as the format of the lists "Rect1" and "Rect2".
-        boxes = None
+        boxes_iou = []
+        for ii, r1 in enumerate(Rect1):
+            for jj, r2 in enumerate(Rect2):
+                iou = IoU(r1, r2)
+                if iou > 0:
+                    boxes_iou.append([(ii, jj), iou])
+        boxes_iou = sorted(boxes_iou, key=lambda a: a[1], reverse=True)
+
+        Rect1_paired = []
+        Rect2_paired = []
+        paired_boxes = []
+        for elem in boxes_iou:
+            idx, _ = elem[0], elem[1]
+            if idx[0] not in Rect1_paired and idx[1] not in Rect2_paired:
+                paired_boxes.append(idx)
+                Rect1_paired.append(idx[0])
+                Rect2_paired.append(idx[1])
+
+        boxes = []
+        for idx in paired_boxes:
+            r1 = Rect1[idx[0]]
+            r2 = Rect2[idx[1]]
+            avg_r = [int((r1[a] + r2[a]) / 2) for a in range(4)]  # average coords/sizes -> int
+            boxes.append(avg_r)
 
         ######################################
     out_boxes = filter_boxes(boxes)
