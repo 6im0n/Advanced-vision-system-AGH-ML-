@@ -1,3 +1,8 @@
-# add opencv and matplotlib
 opencv-python
 numpy
+h5py
+matplotlib
+insightface
+onnxruntime-gpu
+nvidia-cudnn-cu12
+tqdm
