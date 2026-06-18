@@ -3,6 +3,7 @@ numpy
 h5py
 matplotlib
 insightface
-onnxruntime-gpu
+#onnxruntime # fallback to run on cpu
+onnxruntime-gpu[cuda,cudnn]
 nvidia-cudnn-cu12
 tqdm
